@@ -221,9 +221,236 @@ pipelineJob("01-CI-Build-Pipelines/jhipster-microservice-ci-dual-dropdown") {
 ---
 
 #### Pattern 2: Decoupled Two-Pipeline Architecture (CI $\rightarrow$ CD Hand-off) [RECOMMENDED]
-*Implemented in: [`jobdsl/pipelines-ci.groovy`](jobdsl/pipelines-ci.groovy) (`*-ci-build`) and [`jobdsl/pipelines-cd.groovy`](jobdsl/pipelines-cd.groovy) (`multi-cluster-release-orchestrator`)*
+*Implemented in: [`jobdsl/pipelines-ci.groovy`](jobdsl/pipelines-ci.groovy) (`*-ci-build`), [`jenkinsfiles/ci/Jenkinsfile.app-java-maven`](jenkinsfiles/ci/Jenkinsfile.app-java-maven), [`jobdsl/pipelines-cd.groovy`](jobdsl/pipelines-cd.groovy) (`multi-cluster-release-orchestrator`), and [`jenkinsfiles/cd/Jenkinsfile.release-orchestrator`](jenkinsfiles/cd/Jenkinsfile.release-orchestrator)*
 
-Separates artifact creation from release promotion. Pipeline 01 focuses on building the application code with its own Git Parameter, while Pipeline 02 is bound to `jenkins-git-parameter-global-vars` with its own Git Parameter dropdown for multi-cluster release orchestration:
+Separates artifact creation from release promotion. Pipeline 01 focuses on building the application code with its own Git Parameter dropdown, while Pipeline 02 is bound to `jenkins-git-parameter-global-vars` with its own Git Parameter dropdown for multi-cluster release orchestration.
+
+##### 1. Pipeline 01: CI Build Pipeline (App Code & Downstream Hand-off)
+
+**A. Job DSL Implementation (`jobdsl/pipelines-ci.groovy`):**
+Configures a dedicated `gitParameterDefinition` targeting the application repository, alongside parameters to configure the downstream release trigger:
+
+```groovy
+// Job DSL Implementation: Decoupled CI Build Pipeline with Application Git Parameter
+pipelineJob("01-CI-Build-Pipelines/jhipster-microservice-ci-build") {
+    description('''
+    <b>[PATTERN 2: Decoupled CI Build Pipeline - Recommended]</b><br/>
+    Cloud-Native Java 21 / Spring Boot Microservice<br/>
+    • <b>App Revision</b>: Dynamic Git Parameter Dropdown on https://github.com/nubenetes/jhipster-microservice.git<br/>
+    • <b>Global Vars</b>: Passed via parameter to downstream 02-CD-Release-Orchestrator.
+    '''.stripIndent())
+
+    parameters {
+        // Dropdown: Application Repository (Branches & Tags)
+        gitParameterDefinition {
+            name('APP_GIT_REVISION')
+            type('PT_BRANCH_TAG')
+            defaultValue('main')
+            description('Select Application Git Branch/Tag from https://github.com/nubenetes/jhipster-microservice.git')
+            branchFilter('.*')
+            tagFilter('*')
+            sortMode('DESCENDING_SMART')
+            selectedValue('DEFAULT')
+            useRepository('https://github.com/nubenetes/jhipster-microservice.git')
+            quickFilterEnabled(true)
+        }
+
+        booleanParam('TRIGGER_CD_RELEASE', true, 'Automatically trigger downstream CD Release Orchestrator.')
+        stringParam('GLOBAL_VARS_BRANCH', 'main', 'Global Variables branch to pass to downstream CD Release Orchestrator.')
+        choiceParam('TARGET_ENVIRONMENT', ['dev', 'staging', 'prod'], 'Initial deployment target environment for downstream CD release.')
+    }
+
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/nubenetes/jenkins-git-parameter.git')
+                    }
+                    branch('*/main')
+                }
+            }
+            scriptPath('jenkinsfiles/ci/Jenkinsfile.app-java-maven')
+            lightweight(true)
+        }
+    }
+}
+```
+
+**B. Declarative Jenkinsfile CI Stage (`jenkinsfiles/ci/Jenkinsfile.app-java-maven`):**
+Builds the container image, tags it with an immutable build identifier, and triggers Pipeline 02 passing the configuration branch and artifact metadata:
+
+```groovy
+// Jenkinsfile Stage: Compile, Package Image, and Trigger Downstream CD Orchestrator
+stage('Checkout Application Code') {
+    steps {
+        script {
+            checkout([
+                $class: 'GitSCM',
+                branches: [[name: "${params.APP_GIT_REVISION}"]],
+                userRemoteConfigs: [[url: env.APP_REPO_URL]]
+            ])
+            env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+            env.CALCULATED_TAG   = "2.1.0-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
+        }
+    }
+}
+
+// ... Compile, Test, Package, and Push Image stages ...
+
+stage('Trigger CD Release Orchestrator') {
+    when {
+        expression { return params.TRIGGER_CD_RELEASE == true }
+    }
+    steps {
+        echo "===> Triggering Downstream CD Release Orchestration Pipeline..."
+        build job: '02-CD-Release-Orchestrators/multi-cluster-release-orchestrator',
+            parameters: [
+                string(name: 'GLOBAL_VARS_REVISION', value: params.GLOBAL_VARS_BRANCH ?: 'main'),
+                string(name: 'APP_NAME', value: env.APP_NAME),
+                string(name: 'IMAGE_TAG', value: env.CALCULATED_TAG),
+                string(name: 'TARGET_ENVIRONMENT', value: params.TARGET_ENVIRONMENT ?: 'dev'),
+                booleanParam(name: 'AUTO_PROMOTE_TO_STAGING', value: true),
+                booleanParam(name: 'REQUIRE_PROD_APPROVAL', value: true),
+                string(name: 'TRIGGERED_BY', value: 'CI_PIPELINE'),
+                string(name: 'CHANGE_REQUEST_ID', value: "CI-AUTO-${BUILD_NUMBER}")
+            ],
+            wait: false
+    }
+}
+```
+
+---
+
+##### 2. Pipeline 02: CD Release Orchestrator (Global Config Dropdown & GitOps Promotion)
+
+**A. Job DSL Implementation (`jobdsl/pipelines-cd.groovy`):**
+Configures a dedicated `gitParameterDefinition` targeting the centralized `jenkins-git-parameter-global-vars` configuration repository, exposing promotion flags and token-based REST dispatching:
+
+```groovy
+// Job DSL Implementation: Multi-Cluster CD Release Orchestrator with Global Vars Dropdown
+pipelineJob("02-CD-Release-Orchestrators/multi-cluster-release-orchestrator") {
+    description('''
+    🚀 <b>Enterprise Multi-Cluster Release & Promotion Orchestrator</b><br/>
+    Orchestrates promotion across 3 OpenShift clusters (DEV -> STAGING -> PROD) with ArgoCD 3.5.<br/>
+    • Parameterized with <b>Git Parameter</b> on the Global Variables repository.<br/>
+    • Can be triggered manually, by upstream CI build pipelines, or externally via REST API.
+    '''.stripIndent())
+
+    authenticationToken('RELEASE_DISPATCH_TOKEN_2026')
+
+    parameters {
+        // Dropdown: Global Variables & Multi-Cluster Environment Configuration Repo
+        gitParameterDefinition {
+            name('GLOBAL_VARS_REVISION')
+            type('PT_BRANCH_TAG')
+            defaultValue('main')
+            description('Select the Git Branch or Tag from Global Configuration (jenkins-git-parameter-global-vars)')
+            branchFilter('.*')
+            tagFilter('*')
+            sortMode('DESCENDING_SMART')
+            selectedValue('DEFAULT')
+            useRepository('https://github.com/nubenetes/jenkins-git-parameter-global-vars.git')
+            quickFilterEnabled(true)
+        }
+
+        choiceParam('APP_NAME', ['jhipster-microservice', 'angular-frontend', 'all-apps'], 'Application to release and promote.')
+        stringParam('IMAGE_TAG', 'latest', 'Container Image Tag to deploy and promote across OpenShift clusters.')
+        choiceParam('TARGET_ENVIRONMENT', ['dev', 'staging', 'prod', 'full-promotion-chain'], 'Target environment or full promotional chain.')
+        booleanParam('AUTO_PROMOTE_TO_STAGING', true, 'Automatically promote image and deploy to OCP STAGING cluster if DEV tests pass.')
+        booleanParam('REQUIRE_PROD_APPROVAL', true, 'Require interactive human gate approval before deploying to OCP PROD cluster.')
+        choiceParam('TRIGGERED_BY', ['MANUAL', 'CI_PIPELINE', 'BACKSTAGE_IDP', 'SERVICENOW_ITSM', 'JIRA_CMDB'], 'Caller identity for audit and trace metadata.')
+        stringParam('CHANGE_REQUEST_ID', 'CHG-DEFAULT-0000', 'ITSM / Jira Change Request ID for production compliance.')
+    }
+
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        url('https://github.com/nubenetes/jenkins-git-parameter.git')
+                    }
+                    branch('*/main')
+                }
+            }
+            scriptPath('jenkinsfiles/cd/Jenkinsfile.release-orchestrator')
+            lightweight(true)
+        }
+    }
+}
+```
+
+**B. Declarative Jenkinsfile CD Stages (`jenkinsfiles/cd/Jenkinsfile.release-orchestrator`):**
+Checks out the selected global variables revision dynamically, updates GitOps environment manifests, triggers ArgoCD syncs, and promotes immutable images across OpenShift clusters:
+
+```groovy
+// Jenkinsfile Stage: Dynamic Global Config Checkout & Multi-Cluster Promotion Flow
+stage('Initialize & Resolve Global Configuration') {
+    steps {
+        script {
+            echo "===> Checking out Global Vars Repository at revision: ${params.GLOBAL_VARS_REVISION}"
+            dir('jenkins-git-parameter-global-vars') {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "${params.GLOBAL_VARS_REVISION}"]],
+                    userRemoteConfigs: [[url: 'https://github.com/nubenetes/jenkins-git-parameter-global-vars.git']]
+                ])
+            }
+        }
+    }
+}
+
+stage('Deploy to OCP DEV Cluster') {
+    when {
+        expression { return params.TARGET_ENVIRONMENT in ['dev', 'full-promotion-chain', 'staging', 'prod'] }
+    }
+    steps {
+        script {
+            // Update GitOps manifests in global vars repo & Sync ArgoCD DEV App
+            gitopsCommit(envName: 'dev', appName: params.APP_NAME, imageTag: params.IMAGE_TAG, configDir: 'jenkins-git-parameter-global-vars')
+            argoAppSync(appName: "${params.APP_NAME}-dev", targetRevision: params.GLOBAL_VARS_REVISION, server: env.ARGOCD_SERVER)
+        }
+    }
+}
+
+stage('Promote to OCP STAGING Cluster') {
+    when {
+        expression { return params.AUTO_PROMOTE_TO_STAGING == true && params.TARGET_ENVIRONMENT in ['staging', 'full-promotion-chain', 'prod'] }
+    }
+    steps {
+        script {
+            // Promote immutable image across cluster registries via Skopeo
+            skopeoPromote(
+                sourceImage: "${env.DEV_REGISTRY}/${env.DEV_NAMESPACE}/${params.APP_NAME}:${params.IMAGE_TAG}",
+                destImage: "${env.STAGING_REGISTRY}/${env.STAGING_NAMESPACE}/${params.APP_NAME}:${params.IMAGE_TAG}"
+            )
+            gitopsCommit(envName: 'staging', appName: params.APP_NAME, imageTag: params.IMAGE_TAG, configDir: 'jenkins-git-parameter-global-vars')
+            argoAppSync(appName: "${params.APP_NAME}-staging", targetRevision: params.GLOBAL_VARS_REVISION, server: env.ARGOCD_SERVER)
+        }
+    }
+}
+
+stage('Promote to OCP PROD Cluster') {
+    when {
+        expression { return params.TARGET_ENVIRONMENT in ['prod', 'full-promotion-chain'] }
+    }
+    steps {
+        script {
+            if (params.REQUIRE_PROD_APPROVAL) {
+                input message: "Approve deployment of ${params.APP_NAME}:${params.IMAGE_TAG} to OCP PRODUCTION?", submitter: 'release-managers,platform-admins'
+            }
+            skopeoPromote(
+                sourceImage: "${env.STAGING_REGISTRY}/${env.STAGING_NAMESPACE}/${params.APP_NAME}:${params.IMAGE_TAG}",
+                destImage: "${env.PROD_REGISTRY}/${env.PROD_NAMESPACE}/${params.APP_NAME}:${params.IMAGE_TAG}"
+            )
+            gitopsCommit(envName: 'prod', appName: params.APP_NAME, imageTag: params.IMAGE_TAG, configDir: 'jenkins-git-parameter-global-vars')
+            argoAppSync(appName: "${params.APP_NAME}-prod", targetRevision: params.GLOBAL_VARS_REVISION, server: env.ARGOCD_SERVER)
+        }
+    }
+}
+```
+
+##### 3. End-to-End Hand-off Sequence Diagram
 
 ```mermaid
 sequenceDiagram
@@ -442,29 +669,40 @@ jenkins-git-parameter/
 │       └── prometheus-values.yaml           # Prometheus scrape configurations
 ├── jcasc/
 │   ├── jenkins-jcasc.yaml                   # Jenkins Configuration as Code (Security, OTel, Seed Job)
-│   └── pod-templates.yaml                   # Ephemeral Kubernetes Agent pod templates
+│   ├── pod-templates.yaml                   # Ephemeral Kubernetes Agent pod templates
+│   └── github-app-credentials.yaml          # Automated short-lived GitHub App authentication
 ├── jobdsl/
 │   ├── seed-job.groovy                      # Master Seed Job provisioning all pipelines
-│   ├── pipelines-ci.groovy                  # Job DSL for Application CI pipelines (Git Parameter on App)
-│   └── pipelines-cd.groovy                  # Job DSL for CD Release Orchestrators (Git Parameter on Vars)
+│   ├── pipelines-ci.groovy                  # Job DSL for Application CI pipelines (Patterns 1 & 2)
+│   └── pipelines-cd.groovy                  # Job DSL for CD Release Orchestrators (Global Vars Git Parameter)
 ├── jenkinsfiles/
 │   ├── ci/
-│   │   ├── Jenkinsfile.app-java-maven       # Declarative CI pipeline for Java 21 Spring Boot
-│   │   └── Jenkinsfile.app-angular          # Declarative CI pipeline for Angular 18+
+│   │   ├── Jenkinsfile.app-java-maven                 # Pattern 2: Declarative CI pipeline for Java 21
+│   │   ├── Jenkinsfile.app-angular                    # Pattern 2: Declarative CI pipeline for Angular 18+
+│   │   ├── Jenkinsfile.app-java-maven-dual-dropdown   # Pattern 1: Dual-Dropdown Multi-Remote SCM pipeline
+│   │   └── Jenkinsfile.app-angular-dual-dropdown      # Pattern 1: Dual-Dropdown Angular pipeline
 │   └── cd/
-│       ├── Jenkinsfile.release-orchestrator # Declarative Multi-Cluster Release & Promotion pipeline
-│       └── Jenkinsfile.hotfix-deploy        # Fast-track emergency hotfix pipeline
+│       ├── Jenkinsfile.release-orchestrator           # Pattern 2: Multi-Cluster Release & Promotion pipeline
+│       └── Jenkinsfile.hotfix-deploy                  # Fast-track emergency hotfix pipeline
 ├── shared-library/
 │   ├── vars/
 │   │   ├── argoAppSync.groovy               # Step: Trigger & wait for ArgoCD 3.5 sync
 │   │   ├── skopeoPromote.groovy             # Step: Promote container image between cluster registries
 │   │   ├── gitopsCommit.groovy              # Step: Update GitOps environment repository
-│   │   └── otelLogEvent.groovy              # Step: Annotate OpenTelemetry spans
+│   │   ├── otelLogEvent.groovy              # Step: Annotate OpenTelemetry spans
+│   │   ├── cosignSign.groovy                # Step: Cosign container image signing & SLSA 3 attestation
+│   │   └── sbomGenerate.groovy              # Step: Syft SBOM generation & Cosign attestation
 │   └── src/com/nubenetes/gitops/
 │       └── ClusterEnvironment.groovy       # Strongly typed Groovy cluster model
+├── security/
+│   ├── external-secrets-operator/
+│   │   ├── cluster-secret-store-vault.yaml  # Vault HashiCorp ClusterSecretStore
+│   │   └── external-secret-template.yaml    # ExternalSecret custom resource definition
+│   └── openshift-image-signature-policy.yaml# OpenShift MachineConfig signature verification policy
 ├── argocd-apps/
 │   ├── root-app-of-apps.yaml                # ArgoCD Root App-of-Apps pattern
 │   ├── applicationset-clusters.yaml         # Multi-Cluster ApplicationSet generator
+│   ├── applicationset-pull-request-preview.yaml # Dynamic ephemeral PR preview generator
 │   └── apps/
 │       ├── dev/jhipster-microservice.yaml
 │       ├── staging/jhipster-microservice.yaml
@@ -474,10 +712,21 @@ jenkins-git-parameter/
 │   │   ├── Dockerfile                       # Multi-stage container build
 │   │   ├── pom.xml
 │   │   ├── src/...
-│   │   └── k8s/                             # Kustomize base & overlays (dev, staging, prod)
-│   └── jenkins-git-parameter-global-vars/               # Centralized Global Configuration repository
-│       ├── environments/{dev,staging,prod}.yaml
-│       └── clusters/{ocp-dev,ocp-staging,ocp-prod}.yaml
+│   │   ├── k8s/                             # Kustomize base & overlays (dev, staging, prod)
+│   │   └── rollout/                         # Argo Rollouts progressive delivery manifests
+│   │       ├── rollout-canary-jhipster.yaml
+│   │       ├── analysis-template-prometheus.yaml
+│   │       └── services-active-canary.yaml
+│   └── nubenetes-global-vars/               # Centralized Global Configuration template reference
+│       ├── apps/applications-inventory.yaml
+│       ├── clusters/
+│       │   ├── ocp-dev-cluster.yaml
+│       │   ├── ocp-staging-cluster.yaml
+│       │   └── ocp-prod-cluster.yaml
+│       └── environments/
+│           ├── dev.yaml
+│           ├── staging.yaml
+│           └── prod.yaml
 ├── observability/
 │   └── dashboards/
 │       ├── jenkins-performance-otel.json    # Grafana Dashboard: Pipeline & OTel Spans
