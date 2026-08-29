@@ -1,0 +1,126 @@
+// ==============================================================================
+// Declarative CI/CD Pipeline (Pattern 1: Dual Dropdown All-in-One)
+// Application: Java 21 / Spring Boot Microservice with In-Pipeline Global Vars
+// ==============================================================================
+pipeline {
+    agent {
+        node {
+            label 'maven-jdk21'
+        }
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '30', daysToKeepStr: '30'))
+        timestamps()
+        ansiColor('xterm')
+        timeout(time: 45, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        APP_NAME           = 'jhipster-microservice'
+        APP_REPO_URL       = 'https://github.com/nubenetes/jhipster-microservice.git'
+        GLOBAL_VARS_REPO   = 'https://github.com/nubenetes/jenkins-git-parameter-global-vars.git'
+        DEV_REGISTRY       = 'image-registry.openshift-image-registry.svc:5000'
+        DEV_NAMESPACE      = 'nubenetes-dev-apps'
+        IMAGE_NAME         = "${env.DEV_REGISTRY}/${env.DEV_NAMESPACE}/${env.APP_NAME}"
+        GIT_COMMIT_SHORT   = ''
+        CALCULATED_TAG     = ''
+    }
+
+    stages {
+        stage('Checkout Application & Global Vars') {
+            steps {
+                script {
+                    echo "================================================================="
+                    echo "🚀 DUAL-DROPDOWN PIPELINE EXECUTION (PATTERN 1)"
+                    echo "Selected App Revision:         ${params.APP_GIT_REVISION}"
+                    echo "Selected Global Vars Revision: ${params.GLOBAL_VARS_REVISION}"
+                    echo "Target Environment:            ${params.TARGET_ENVIRONMENT}"
+                    echo "================================================================="
+
+                    // 1. Checkout Application Code
+                    echo "===> [1/2] Checking out Application Code at: ${params.APP_GIT_REVISION}"
+                    dir('app-source') {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: "${params.APP_GIT_REVISION}"]],
+                            userRemoteConfigs: [[url: env.APP_REPO_URL, name: 'origin-app']]
+                        ])
+                        env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                        env.CALCULATED_TAG   = "2.1.0-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
+                    }
+
+                    // 2. Checkout Global Variables Repository
+                    echo "===> [2/2] Checking out Global Vars at: ${params.GLOBAL_VARS_REVISION}"
+                    dir('global-vars') {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: "${params.GLOBAL_VARS_REVISION}"]],
+                            userRemoteConfigs: [[url: env.GLOBAL_VARS_REPO, name: 'origin-vars']]
+                        ])
+                    }
+
+                    currentBuild.displayName = "#${BUILD_NUMBER} [App:${params.APP_GIT_REVISION} | Vars:${params.GLOBAL_VARS_REVISION}]"
+                }
+            }
+        }
+
+        stage('Compile & Unit Tests') {
+            steps {
+                container('maven') {
+                    dir('app-source') {
+                        echo "===> Compiling Java 21 Microservice with Maven..."
+                        sh 'mvn -B clean test -Dmaven.test.failure.ignore=false'
+                    }
+                }
+            }
+            post {
+                always {
+                    junit testResults: '**/target/surefire-reports/*.xml', allowEmptyResults: true
+                }
+            }
+        }
+
+        stage('Build & Push Container Image') {
+            steps {
+                echo "===> Building Container Image: ${env.IMAGE_NAME}:${env.CALCULATED_TAG}"
+                sh """
+                    echo "Pushing image to OpenShift DEV Registry: ${env.IMAGE_NAME}:${env.CALCULATED_TAG}"
+                """
+            }
+        }
+
+        stage('Apply In-Pipeline DEV Deployment') {
+            when {
+                expression { return params.DEPLOY_TO_DEV == true }
+            }
+            steps {
+                script {
+                    echo "===> [Pattern 1 Direct Deploy] Updating DEV manifests using Global Vars (${params.GLOBAL_VARS_REVISION})..."
+                    gitopsCommit(
+                        envName: 'dev',
+                        appName: env.APP_NAME,
+                        imageTag: env.CALCULATED_TAG,
+                        configDir: 'global-vars'
+                    )
+
+                    echo "===> Triggering ArgoCD DEV Sync directly from single pipeline..."
+                    argoAppSync(
+                        appName: "${env.APP_NAME}-dev",
+                        targetRevision: params.GLOBAL_VARS_REVISION
+                    )
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ [SUCCESS] Dual-Dropdown Pipeline Completed for ${env.APP_NAME}:${env.CALCULATED_TAG}"
+        }
+        always {
+            cleanWs deleteDirs: true, notFailBuild: true
+        }
+    }
+}

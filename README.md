@@ -36,10 +36,11 @@
 
 - [Executive Summary & Architecture Overview](#executive-summary--architecture-overview)
 - [In-Depth Architectural Analysis & Design Decisions](#in-depth-architectural-analysis--design-decisions)
-  - [1. Multi-Repository Git Parameter Investigation: The Decoupled 2-Pipeline Pattern](#1-multi-repository-git-parameter-investigation-the-decoupled-2-pipeline-pattern)
-    - [The Core Problem](#the-core-problem)
-    - [The Recommended Solution: Decoupled Two-Pipeline Orchestration](#the-recommended-solution-decoupled-two-pipeline-orchestration)
-    - [Benefits of Decoupled Architecture](#benefits-of-decoupled-architecture)
+  - [1. Multi-Repository Git Parameter Investigation: Two Architectural Patterns](#1-multi-repository-git-parameter-investigation-two-architectural-patterns)
+    - [The Core Problem: Why Did Pipeline 01 Initially Have a Text Box?](#the-core-problem-why-did-pipeline-01-initially-have-a-text-box)
+    - [Pattern 1: Dual Git Parameter Dropdowns in a Single Pipeline (Multi-Remote SCM)](#pattern-1-dual-git-parameter-dropdowns-in-a-single-pipeline-multi-remote-scm)
+    - [Pattern 2: Decoupled Two-Pipeline Architecture (CI -> CD Hand-off)](#pattern-2-decoupled-two-pipeline-architecture-ci--cd-hand-off-recommended)
+    - [When to Use Each Pattern: Environment & Persona Decision Matrix](#when-to-use-each-pattern-environment--persona-decision-matrix)
   - [2. Job DSL + Declarative Pipelines vs. Monolithic Shared Libraries](#2-job-dsl--declarative-pipelines-vs-monolithic-shared-libraries)
   - [3. OpenShift 4.20+ Security & Ephemeral Kubernetes Agents](#3-openshift-420-security--ephemeral-kubernetes-agents)
   - [4. ArgoCD 3.5 Integration & Multi-Cluster Promotion](#4-argocd-35-integration--multi-cluster-promotion)
@@ -145,24 +146,76 @@ flowchart TB
 
 ## In-Depth Architectural Analysis & Design Decisions
 
-### 1. Multi-Repository Git Parameter Investigation: The Decoupled 2-Pipeline Pattern
+### 1. Multi-Repository Git Parameter Investigation: Two Architectural Patterns
 
-#### The Core Problem
-In enterprise architectures, microservices separate application code (`app-repo`) from centralized environmental configuration, secrets, cluster definitions, and helm values (`jenkins-git-parameter-global-vars`). 
+#### The Core Problem: Why Did Pipeline 01 Initially Have a Text Box?
+In cloud-native architectures, applications separate source code (`app-repo`) from centralized environmental configuration, cluster definitions, and Helm values (`jenkins-git-parameter-global-vars`).
 
-When applying the Jenkins `git-parameter` plugin to a pipeline that needs to check out **both** repositories, a fundamental limitation arises in standard Jenkins Declarative Pipelines:
-1. **Parameter Evaluation Lifecycle**: Jenkins evaluates job parameters (including remote branch/tag queries via Git Parameter) **before** workspace allocation and before the `Jenkinsfile` executes.
-2. **SCM Binding**: The `git-parameter` plugin relies on the SCM defined in the Jenkins Job XML. In a single Declarative Pipeline job that dynamically checks out a secondary Git repository inside a stage (`steps { checkout(...) }`), Jenkins master cannot inspect the secondary repository's remote Git references prior to build execution.
+When utilizing the Jenkins `git-parameter` plugin across multiple repositories, two fundamental constraints emerge:
+1. **Pre-Execution Evaluation Lifecycle**: Jenkins evaluates and renders job parameters in the browser **before** allocating an agent and before executing any `Jenkinsfile` stages.
+2. **SCM Binding Constraint**: The `git-parameter` plugin queries remote Git references by inspecting the SCM configured on the Jenkins Master Job XML. In standard Pipeline jobs (`cpsScm`), Jenkins allows only **one** top-level SCM block. If a pipeline clones a secondary repository dynamically inside a stage (`steps { checkout(...) }`), the Jenkins Master cannot discover or populate a dropdown for that secondary repository prior to execution.
 
+To solve this challenge, this repository **implements and delivers BOTH architectural patterns as working code**:
+
+---
+
+#### Pattern 1: Dual Git Parameter Dropdowns in a Single Pipeline (Multi-Remote SCM)
+*Implemented in: [`jobdsl/pipelines-ci.groovy`](jobdsl/pipelines-ci.groovy) (`*-ci-dual-dropdown`) and [`jenkinsfiles/ci/Jenkinsfile.app-java-maven-dual-dropdown`](jenkinsfiles/ci/Jenkinsfile.app-java-maven-dual-dropdown)*
+
+Job DSL configures a single `git` SCM definition containing **multiple named Git `remote` blocks** with dedicated refspecs. The Git Parameter plugin can then target each remote independently using `useRepository`:
+
+```groovy
+// Job DSL Implementation: Multi-Remote SCM with 2 Dynamic Dropdowns
+pipelineJob("01-CI-Build-Pipelines/jhipster-microservice-ci-dual-dropdown") {
+    parameters {
+        // Dropdown 1: Application Repository (Branches & Tags)
+        gitParameterDefinition {
+            name('APP_GIT_REVISION')
+            type('PT_BRANCH_TAG')
+            defaultValue('main')
+            useRepository('origin-app') // Targets Remote 1
+            sortMode('DESCENDING_SMART')
+        }
+
+        // Dropdown 2: Global Variables Repository (Branches & Tags)
+        gitParameterDefinition {
+            name('GLOBAL_VARS_REVISION')
+            type('PT_BRANCH_TAG')
+            defaultValue('main')
+            useRepository('origin-vars') // Targets Remote 2
+            sortMode('DESCENDING_SMART')
+        }
+    }
+
+    definition {
+        cpsScm {
+            scm {
+                git {
+                    remote {
+                        name('origin-app')
+                        url('https://github.com/nubenetes/jhipster-microservice.git')
+                        refspec('+refs/heads/*:refs/remotes/origin-app/* +refs/tags/*:refs/remotes/origin-app/tags/*')
+                    }
+                    remote {
+                        name('origin-vars')
+                        url('https://github.com/nubenetes/jenkins-git-parameter-global-vars.git')
+                        refspec('+refs/heads/*:refs/remotes/origin-vars/* +refs/tags/*:refs/remotes/origin-vars/tags/*')
+                    }
+                    branch('origin-app/main')
+                }
+            }
+            scriptPath('jenkinsfiles/ci/Jenkinsfile.app-java-maven-dual-dropdown')
+        }
+    }
+}
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ ❌ Monolithic Single Pipeline Antipattern:                                   │
-│    Git Parameter cannot inspect Secondary Repo before workspace execution    │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
 
-#### The Recommended Solution: Decoupled Two-Pipeline Orchestration
-We implement two linked, specialized pipelines provisioned dynamically via Job DSL:
+---
+
+#### Pattern 2: Decoupled Two-Pipeline Architecture (CI $\rightarrow$ CD Hand-off) [RECOMMENDED]
+*Implemented in: [`jobdsl/pipelines-ci.groovy`](jobdsl/pipelines-ci.groovy) (`*-ci-build`) and [`jobdsl/pipelines-cd.groovy`](jobdsl/pipelines-cd.groovy) (`multi-cluster-release-orchestrator`)*
+
+Separates artifact creation from release promotion. Pipeline 01 focuses on building the application code with its own Git Parameter, while Pipeline 02 is bound to `jenkins-git-parameter-global-vars` with its own Git Parameter dropdown for multi-cluster release orchestration:
 
 ```mermaid
 sequenceDiagram
@@ -181,7 +234,7 @@ sequenceDiagram
         CI->>CI: Compile Java 21 / Run Unit Tests / Sonar / Trivy
         CI->>DevReg: Build & Push Container Image (e.g. 2.1.0-42-a1b2c3d)
         CI->>CD: Trigger Downstream with (IMAGE_TAG, GLOBAL_VARS_REVISION='main')
-    else Trigger Path B: External API / Backstage / ServiceNow
+    else Trigger Path B: External API / Backstage / ServiceNow / Jira
         Dev->>CD: Direct REST API / UI Trigger with (GLOBAL_VARS_REVISION, IMAGE_TAG)
     end
 
@@ -204,10 +257,21 @@ sequenceDiagram
     end
 ```
 
-#### Benefits of Decoupled Architecture:
-- **Clean SCM Separation**: Pipeline 1 binds its Git Parameter to the Application repo; Pipeline 2 binds its Git Parameter to the Global Vars repo.
-- **External Integration Friendly**: Pipeline 2 exposes a clean REST API interface (`/job/02-CD-Release-Orchestrators/job/multi-cluster-release-orchestrator/buildWithParameters`) allowing Backstage IDP, ServiceNow ITSM change requests, or Jira workflows to trigger deployments with explicit configuration tags.
-- **Independent Lifecycles**: A release manager can redeploy or promote an existing, pre-built immutable image against an updated global configuration branch without recompiling or rebuilding the application.
+---
+
+#### When to Use Each Pattern: Environment & Persona Decision Matrix
+
+| Dimension | Pattern 1: Dual Dropdown (Multi-Remote SCM) | Pattern 2: Decoupled CI $\rightarrow$ CD Orchestration |
+| :--- | :--- | :--- |
+| **Primary Use Case** | **Developer Workspaces & Sandboxes** | **Enterprise Multi-Cluster Production** |
+| **Target Environments** | `dev`, feature branches, ephemeral PR preview clusters | `dev` $\rightarrow$ `staging` (UAT) $\rightarrow$ `prod` |
+| **User Persona** | Individual Software Engineers & Frontend Developers | Release Managers, QA Leads, Platform Teams, ITSM |
+| **UI Experience** | Single "Build with Parameters" form with **2 live dropdowns** | Dedicated CI form for code; Dedicated CD form for release |
+| **Jenkins Master Overhead** | Fetches remote refs from **both repos** on every page render | SCM queries are isolated to the specific pipeline |
+| **Branch Collision Risk** | Requires strict refspec prefixes (`origin-app/*` vs `origin-vars/*`) | **Zero risk**; completely isolated Git repositories |
+| **External Integration** | Complex; external callers must know build & compilation parameters | **Simple REST API**: Callers only supply `IMAGE_TAG` & `GLOBAL_VARS_REVISION` |
+| **Promotion & Rollbacks** | Rebuilds application code on every run | Promotes **existing immutable images** without recompiling |
+| **Governance & SoD** | Code committers deploy directly to target cluster | Enforces **Segregation of Duties** via Jira Forms / CAB |
 
 ---
 
