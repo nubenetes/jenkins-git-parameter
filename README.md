@@ -169,20 +169,28 @@ In cloud-native architectures, applications separate source code (`app-repo`) fr
 When engineering teams attempt to introduce multiple `gitParameter` dropdowns into a single Jenkins Pipeline, they almost universally encounter a hard blocker where `GitSCM` appears to only support **one** repository, or secondary dropdowns fail with `No GIT repository configured in SCM configuration`.
 
 ```mermaid
-flowchart TD
-    subgraph UI_Evaluation["1. Pre-Execution Evaluation Phase (Browser UI / Jenkins Master)"]
-        User["User clicks 'Build with Parameters'"]
-        Master["Jenkins Master inspects Job XML definition"]
-        GitParam["git-parameter plugin executes 'git ls-remote'"]
-        Dropdown["Renders HTML Parameter Form in Browser"]
-        User --> Master --> GitParam --> Dropdown
+flowchart TB
+    subgraph UI_Phase["1. Pre-Execution Phase (Jenkins Controller)"]
+        direction TB
+        User["👤 User opens<br/>'Build with Parameters'"]
+        Master["⚙️ Jenkins Master reads<br/>Job XML (SCM Definition)"]
+        GitParam["🔍 git-parameter plugin runs<br/>'git ls-remote' on Master"]
+        Dropdown["📋 Renders Dynamic Dropdown<br/>in User's Browser"]
+
+        User --> Master
+        Master --> GitParam
+        GitParam --> Dropdown
     end
 
-    subgraph Runtime_Execution["2. Runtime Execution Phase (Agent Pod / Jenkinsfile)"]
-        AllocAgent["Kubernetes Agent Pod Allocated"]
-        RunStage["Pipeline Stage: checkout(secondary_repo)"]
-        Dropdown -.->|INVISIBLE TO MASTER AT UI RENDER TIME| RunStage
+    subgraph Runtime_Phase["2. Runtime Execution Phase (Agent Pod)"]
+        direction TB
+        AllocAgent["☸️ Ephemeral Agent Pod<br/>Allocated on Kubernetes"]
+        RunStage["📦 Pipeline Stage runs:<br/>checkout(secondary_repo)"]
+
+        AllocAgent --> RunStage
     end
+
+    Dropdown -.->|"❌ Blindspot: Dynamic checkouts in stages<br/>are invisible to Master at UI render time"| RunStage
 ```
 
 ##### Root Cause Analysis: The Three Jenkins Architectural Constraints
