@@ -60,6 +60,7 @@ controller:
     - "workflow-aggregator:600.vb_57cdd26fdd7"
     - "workflow-multibranch:795.ve3604f868c2f"
     - "pipeline-stage-view:2.35"
+    - "pipeline-graph-view:320.v8f37a_e1281cb_"
     - "pipeline-graph-analysis:244.va_61f008c2a_62"
     - "pipeline-model-definition:2.2221.vc805a_0e872d0"
     - "pipeline-utility-steps:2.17.0"

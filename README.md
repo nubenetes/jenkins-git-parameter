@@ -185,11 +185,19 @@ sequenceDiagram
 
 | Dimension | Monolithic Shared Library Antipattern (`@Library('...') _`) | Modern Architecture: Job DSL + Declarative Templates + Granular Steps |
 | :--- | :--- | :--- |
-| **Pipeline Visibility** | Opaque black box; stages hidden inside Groovy scripts | Full Stage View and Blue Ocean visualization natively rendered |
+| **Pipeline Visibility** | Opaque black box; stages hidden inside Groovy scripts | Modern Stage View, Pipeline Graph View, and OpenTelemetry trace spans natively rendered |
 | **Jenkins Replay** | ❌ **Broken**: Replay cannot modify Shared Library code | ✅ **100% Functional**: Developers can replay and edit pipeline stages in UI |
 | **Job Provisioning** | Manual UI creation or complex custom scripts | Automated Seed Job (`seed-job.groovy`) reconciles all jobs from Git |
 | **Syntax Validation** | Runtime-only Groovy failures | Declarative linter validates syntax at definition time |
 | **Step Reusability** | Tight coupling; copy-pasting scripted logic | Granular custom steps (`argoAppSync`, `skopeoPromote`, `gitopsCommit`) |
+
+> [!NOTE]
+> **Blue Ocean Deprecation & Modern UX Architecture**:
+> Blue Ocean has been officially deprecated by the Jenkins project due to maintenance overhead, heavy resource footprints, and limited compatibility with modern Declarative features. 
+> This platform adopts the modern recommended Jenkins UX stack:
+> 1. **Pipeline Graph View Plugin (`pipeline-graph-view`)**: Lightweight, responsive pipeline visualization directly embedded in the core Jenkins interface.
+> 2. **Pipeline Stage View (`pipeline-stage-view`)**: Fast tabular build and stage matrix.
+> 3. **OpenTelemetry + Grafana**: Deep distributed trace analysis with sub-millisecond stage breakdown and span correlations.
 
 **Decision**: We use **Job DSL** to generate **Declarative Pipeline jobs** pointing to standard declarative `Jenkinsfile` definitions, complemented by a **lightweight Jenkins Shared Library** containing modular, reusable steps.
 
@@ -411,6 +419,8 @@ The design patterns and technical configurations implemented in this repository 
    - [Jenkins Job DSL Plugin API & Multi-Branch Guide](https://jenkinsci.github.io/job-dsl-plugin/)
    - [Jenkins Git Parameter Plugin Documentation](https://plugins.jenkins.io/git-parameter/)
    - [Jenkins Declarative Pipeline Syntax Specification](https://www.jenkins.io/doc/book/pipeline/syntax/)
+   - [Jenkins Official Blue Ocean Deprecation Notice](https://www.jenkins.io/blog/2024/09/04/blue-ocean-deprecation/)
+   - [Jenkins Pipeline Graph View Plugin](https://plugins.jenkins.io/pipeline-graph-view/)
 2. **Red Hat OpenShift 4.20+ Platform Documentation**:
    - [OpenShift Container Platform 4.17/4.20 Architecture & Hardening](https://docs.redhat.com/en/documentation/openshift_container_platform/)
    - [Managing Security Context Constraints (SCC) in OpenShift](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/authentication_and_authorization/managing-pod-security-policies)
