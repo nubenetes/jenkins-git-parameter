@@ -471,23 +471,23 @@ flowchart TB
         direction LR
         subgraph JiraTrack["ITSM & Governance Track"]
             JiraUser["👨‍💻 Release Engineer"]
-            JiraForm["📝 Jira Service Mgmt Form<br/>(Selects App, Version & Env)"]
-            CMDB[("🗄️ Jira CMDB / Assets<br/>(Apps, Clusters, SLAs, CAB)")]
-            CAB["🛡️ Change Advisory Board (CAB)<br/>(Approval Workflow)"]
-            JiraWebhook["⚡ Jira Automation Webhook"]
+            JiraForm["📝 Jira Service Mgmt Form<br/>(App, Version & Env)"]
+            CMDB[("🗄️ Jira CMDB / Assets<br/>(Apps, Clusters, CAB)")]
+            CAB["🛡️ Change Advisory Board<br/>(CAB Approval Gate)"]
+            JiraWebhook["⚡ Jira Webhook Trigger"]
         end
 
         subgraph BackstageTrack["Developer Portal Track"]
             DevUser["👩‍💻 Application Developer"]
-            BackstageUI["🏛️ Backstage IDP Portal<br/>(Self-Service Software Template)"]
-            BackstageCatalog[("📚 Backstage Software Catalog<br/>(Components, APIs, Dependencies)")]
-            BackstagePlugin["⚡ Backstage Jenkins Plugin<br/>(REST API Dispatch)"]
+            BackstageUI["🏛️ Backstage IDP Portal<br/>(Software Template)"]
+            BackstageCatalog[("📚 Backstage Catalog<br/>(Components & APIs)")]
+            BackstagePlugin["⚡ Backstage Plugin<br/>(API Dispatch)"]
         end
     end
 
     subgraph CI_CD_Layer["2. CI/CD Release Orchestration Engine"]
-        JenkinsCD["🚀 Jenkins 02-CD-Release-Orchestrator<br/>(Parameter: GLOBAL_VARS_REVISION)"]
-        GlobalVars[("📦 jenkins-git-parameter-global-vars<br/>(Centralized Environment Config)")]
+        JenkinsCD["🚀 02-CD-Release-Orchestrator<br/>(Param: GLOBAL_VARS_REVISION)"]
+        GlobalVars[("📦 Global Variables Repo<br/>(Environment Configs)")]
     end
 
     subgraph DeploymentObservabilityLayer["3. Multi-Cluster GitOps & Telemetry"]
@@ -496,23 +496,23 @@ flowchart TB
         OTel["📊 OpenTelemetry & Grafana<br/>(Traces, Metrics & Logs)"]
     end
 
-    JiraUser -->|Submits Release Form| JiraForm
-    JiraForm <-->|Validates CIs & Approvers| CMDB
-    JiraForm -->|Requests Change Approval| CAB
-    CAB -->|Approves Change Ticket| JiraWebhook
+    JiraUser -->|Submit Release Form| JiraForm
+    JiraForm <-->|Query CMDB CIs| CMDB
+    JiraForm -->|Request CAB Approval| CAB
+    CAB -->|Approve Change| JiraWebhook
     JiraWebhook -->|POST /buildWithParameters| JenkinsCD
 
-    DevUser -->|Executes Release Action| BackstageUI
-    BackstageUI <-->|Fetches Entity Metadata| BackstageCatalog
-    BackstageUI -->|Triggers Action| BackstagePlugin
+    DevUser -->|Trigger Self-Service| BackstageUI
+    BackstageUI <-->|Fetch Catalog Metadata| BackstageCatalog
+    BackstageUI -->|Dispatch API Call| BackstagePlugin
     BackstagePlugin -->|POST /buildWithParameters| JenkinsCD
 
-    JenkinsCD -->|Clones Selected Revision| GlobalVars
-    JenkinsCD -->|Orchestrates GitOps Sync| Argo
-    Argo -->|Applies Manifests| OCP
-    JenkinsCD -.->|Emits W3C Distributed Spans| OTel
-    JenkinsCD -.->|Updates Issue & Closes Ticket| JiraForm
-    JenkinsCD -.->|Reports Build & Deploy Status| BackstageUI
+    JenkinsCD -->|Clone Selected Revision| GlobalVars
+    JenkinsCD -->|Promote & Sync GitOps| Argo
+    Argo -->|Apply Manifests| OCP
+    JenkinsCD -.->|Emit W3C Trace Spans| OTel
+    JenkinsCD -.->|Close Jira Ticket| JiraForm
+    JenkinsCD -.->|Update Status in UI| BackstageUI
 ```
 
 ---
