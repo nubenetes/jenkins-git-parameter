@@ -862,28 +862,55 @@ make reinstall
 
 ## References & Evidence Links
 
-The design patterns and technical configurations implemented in this repository are based on official documentation and industry standards:
+The design patterns and technical configurations implemented in this repository are based on official documentation, security frameworks, and industry standards:
 
-1. **Jenkins Official Helm Chart & Documentation**:
+1. **Jenkins Core, IaC & Job DSL**:
    - [Jenkins Official Helm Chart Repository](https://github.com/jenkinsci/helm-charts)
    - [Jenkins Configuration as Code (JCasC) Reference](https://www.jenkins.io/projects/jcasc/)
-   - [Jenkins Job DSL Plugin API & Multi-Branch Guide](https://jenkinsci.github.io/job-dsl-plugin/)
+   - [Jenkins Job DSL Plugin API & Dynamic Multi-Remote Guide](https://jenkinsci.github.io/job-dsl-plugin/)
    - [Jenkins Git Parameter Plugin Documentation](https://plugins.jenkins.io/git-parameter/)
    - [Jenkins Declarative Pipeline Syntax Specification](https://www.jenkins.io/doc/book/pipeline/syntax/)
    - [Jenkins Official Blue Ocean Deprecation Notice](https://www.jenkins.io/blog/2024/09/04/blue-ocean-deprecation/)
    - [Jenkins Pipeline Graph View Plugin](https://plugins.jenkins.io/pipeline-graph-view/)
-2. **Red Hat OpenShift 4.20+ Platform Documentation**:
+
+2. **Red Hat OpenShift 4.20+ Hardening & Networking**:
    - [OpenShift Container Platform 4.17/4.20 Architecture & Hardening](https://docs.redhat.com/en/documentation/openshift_container_platform/)
-   - [Managing Security Context Constraints (SCC) in OpenShift](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/authentication_and_authorization/managing-pod-security-policies)
-   - [Configuring OpenShift Routes & Ingress TLS Termination](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/networking/configuring-routes)
-3. **ArgoCD 3.5 & GitOps Standards**:
-   - [ArgoCD Official Documentation](https://argo-cd.readthedocs.io/en/stable/)
-   - [ArgoCD ApplicationSet Controller Multi-Cluster Generators](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Generators-List/)
-   - [ArgoCD Sync Waves and Phases Reference](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-waves/)
-4. **Container Image Promotion & Security**:
-   - [Skopeo Container Image Copy Tool Documentation](https://github.com/containers/skopeo)
-   - [Aqua Security Trivy Vulnerability Scanner](https://aquasecurity.github.io/trivy/)
-5. **Observability & OpenTelemetry**:
-   - [Jenkins OpenTelemetry Plugin Documentation](https://plugins.jenkins.io/opentelemetry/)
-   - [OpenTelemetry Collector Architecture](https://opentelemetry.io/docs/collector/)
-   - [Prometheus Scrape Configuration & Grafana Datasources](https://prometheus.io/docs/prometheus/latest/configuration/configuration/)
+   - [Managing Security Context Constraints (SCC: restricted-v2) in OpenShift](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/authentication_and_authorization/managing-pod-security-policies)
+   - [Configuring OpenShift Routes & Edge TLS Termination](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/networking/configuring-routes)
+   - [OpenShift Image Registry & Signature Policy Enforcement](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/images/image-signatures)
+
+3. **ArgoCD 3.5 & Multi-Cluster GitOps**:
+   - [ArgoCD Official Documentation & Architecture](https://argo-cd.readthedocs.io/en/stable/)
+   - [ArgoCD ApplicationSet Controller: Multi-Cluster & PR Generators](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Generators-List/)
+   - [ArgoCD Sync Waves and Progressive Deployment Phases](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-waves/)
+
+4. **Progressive Delivery & Automated Rollouts**:
+   - [Argo Rollouts Documentation: Canary & Blue-Green Strategies](https://argoproj.github.io/argo-rollouts/)
+   - [Argo Rollouts Metric Analysis with Prometheus](https://argoproj.github.io/argo-rollouts/features/analysis/)
+
+5. **Supply Chain Security & Attestation (SLSA Level 3)**:
+   - [Sigstore / Cosign: Container Image Signing & Verification](https://docs.sigstore.dev/cosign/overview/)
+   - [SLSA (Supply-chain Levels for Software Artifacts) Specification](https://slsa.dev/spec/v1.0/)
+   - [in-toto Framework for Supply Chain Integrity](https://in-toto.io/)
+   - [Anchore Syft: Software Bill of Materials (SBOM) Generation](https://github.com/anchore/syft)
+   - [CycloneDX SBOM Standard Specification](https://cyclonedx.org/)
+   - [Aqua Security Trivy Vulnerability & Misconfiguration Scanner](https://aquasecurity.github.io/trivy/)
+   - [Skopeo Container Image Copy Tool](https://github.com/containers/skopeo)
+
+6. **Zero-Trust Secrets & Identity Management**:
+   - [External Secrets Operator (ESO) Official Documentation](https://external-secrets.io/latest/)
+   - [HashiCorp Vault Kubernetes ServiceAccount Authentication](https://developer.hashicorp.com/vault/docs/auth/kubernetes)
+   - [GitHub Apps: Fine-Grained Authentication & Token Generation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/about-authentication-with-a-github-app)
+   - [Jenkins GitHub Branch Source Plugin with GitHub App Auth](https://plugins.jenkins.io/github-branch-source/)
+
+7. **ITSM, Developer Portals & CMDB Integration**:
+   - [Backstage.io: Spotify Open Source Internal Developer Portal](https://backstage.io/docs/overview/what-is-backstage)
+   - [Backstage Software Templates & Catalog Architecture](https://backstage.io/docs/features/software-templates/)
+   - [Atlassian Jira Service Management: Assets & CMDB Documentation](https://www.atlassian.com/software/jira/service-management/features/assets)
+   - [ServiceNow DevOps Change Velocity & Pipeline Automation](https://docs.servicenow.com/bundle/utah-devops/page/product/devops/concept/devops-change-velocity.html)
+
+8. **Observability & Distributed Tracing**:
+   - [Jenkins OpenTelemetry Plugin Reference](https://plugins.jenkins.io/opentelemetry/)
+   - [OpenTelemetry (OTel) Collector Architecture & OTLP Protocol](https://opentelemetry.io/docs/collector/)
+   - [Prometheus Monitoring System & Scrape Targets](https://prometheus.io/docs/prometheus/latest/configuration/configuration/)
+   - [Grafana Dashboards & Distributed Tracing Visualizations](https://grafana.com/docs/grafana/latest/datasources/)
