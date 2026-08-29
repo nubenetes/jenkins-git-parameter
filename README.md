@@ -170,27 +170,25 @@ When engineering teams attempt to introduce multiple `gitParameter` dropdowns in
 
 ```mermaid
 flowchart TB
-    subgraph UI_Phase["1. Pre-Execution Phase (Jenkins Master)"]
+    subgraph UI_Phase["1. Pre-Execution Phase (Master)"]
         direction TB
-        User["👤 User opens<br/>Build Form in UI"]
-        Master["⚙️ Master reads<br/>Job XML SCM Config"]
-        GitParam["🔍 git-parameter runs<br/>'git ls-remote'"]
-        Dropdown["📋 Renders Dropdown<br/>in Web Browser"]
+        User["👤 User opens<br/>Build UI Form"]
+        Master["⚙️ Master reads<br/>Job XML SCM"]
+        GitParam["🔍 git-parameter<br/>queries remote refs"]
+        Dropdown["📋 Renders Dropdown<br/>for Primary Repo"]
 
         User --> Master --> GitParam --> Dropdown
     end
 
-    subgraph BlindspotBox["⚠️ SCM Evaluation Gap"]
-        Gap["❌ Dynamic stage checkouts are<br/>invisible to Master at UI render time"]
-    end
-
-    subgraph Runtime_Phase["2. Runtime Execution Phase (Agent Pod)"]
+    subgraph Runtime_Phase["2. Runtime Execution Phase (Agent)"]
         direction TB
         AllocAgent["☸️ Ephemeral Agent<br/>Pod Allocated"]
-        RunStage["📦 Pipeline Stage runs:<br/>checkout(repo-2)"]
+        RunStage["📦 Pipeline Stage:<br/>checkout(repo-2)"]
 
         AllocAgent --> RunStage
     end
+
+    Gap["⚠️ SCM Blindspot:<br/>Dynamic stage checkouts<br/>run during build and are<br/>invisible at UI render"]
 
     Dropdown -.-> Gap
     Gap -.-> RunStage
