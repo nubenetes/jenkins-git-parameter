@@ -173,13 +173,15 @@ flowchart TB
     subgraph UI_Phase["1. Pre-Execution Phase (Jenkins Master)"]
         direction TB
         User["👤 User opens<br/>Build Form in UI"]
-        Master["⚙️ Controller reads<br/>Job XML SCM Config"]
+        Master["⚙️ Master reads<br/>Job XML SCM Config"]
         GitParam["🔍 git-parameter runs<br/>'git ls-remote'"]
-        Dropdown["📋 Render Parameter<br/>Dropdown in UI"]
+        Dropdown["📋 Renders Dropdown<br/>in Web Browser"]
 
-        User --> Master
-        Master --> GitParam
-        GitParam --> Dropdown
+        User --> Master --> GitParam --> Dropdown
+    end
+
+    subgraph BlindspotBox["⚠️ SCM Evaluation Gap"]
+        Gap["❌ Dynamic stage checkouts are<br/>invisible to Master at UI render time"]
     end
 
     subgraph Runtime_Phase["2. Runtime Execution Phase (Agent Pod)"]
@@ -190,7 +192,8 @@ flowchart TB
         AllocAgent --> RunStage
     end
 
-    Dropdown -.->|"❌ Stage checkouts are<br/>invisible at render time"| RunStage
+    Dropdown -.-> Gap
+    Gap -.-> RunStage
 ```
 
 ##### Root Cause Analysis: The Three Jenkins Architectural Constraints
