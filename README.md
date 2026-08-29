@@ -32,6 +32,35 @@
 
 ---
 
+## 📑 Table of Contents
+
+- [Executive Summary & Architecture Overview](#executive-summary--architecture-overview)
+- [In-Depth Architectural Analysis & Design Decisions](#in-depth-architectural-analysis--design-decisions)
+  - [1. Multi-Repository Git Parameter Investigation: The Decoupled 2-Pipeline Pattern](#1-multi-repository-git-parameter-investigation-the-decoupled-2-pipeline-pattern)
+    - [The Core Problem](#the-core-problem)
+    - [The Recommended Solution: Decoupled Two-Pipeline Orchestration](#the-recommended-solution-decoupled-two-pipeline-orchestration)
+    - [Benefits of Decoupled Architecture](#benefits-of-decoupled-architecture)
+  - [2. Job DSL + Declarative Pipelines vs. Monolithic Shared Libraries](#2-job-dsl--declarative-pipelines-vs-monolithic-shared-libraries)
+  - [3. OpenShift 4.20+ Security & Ephemeral Kubernetes Agents](#3-openshift-420-security--ephemeral-kubernetes-agents)
+  - [4. ArgoCD 3.5 Integration & Multi-Cluster Promotion](#4-argocd-35-integration--multi-cluster-promotion)
+  - [5. Full-Stack Observability: OpenTelemetry, Prometheus & Grafana](#5-full-stack-observability-opentelemetry-prometheus--grafana)
+- [Repository Structure](#repository-structure)
+- [Quick Start: 1-Click Automated Deployment](#quick-start-1-click-automated-deployment)
+  - [Prerequisites](#prerequisites)
+  - [1. Deploy the Complete Platform](#1-deploy-the-complete-platform)
+  - [2. Verify Platform Endpoints](#2-verify-platform-endpoints)
+  - [3. Triggering Pipelines & `GLOBAL_VARS_REVISION` Selection](#3-triggering-pipelines--global_vars_revision-selection)
+    - [Scenario A: Triggering from Pipeline 01 (CI)](#scenario-a-triggering-from-pipeline-01-01-ci-build-pipelines)
+    - [Scenario B: Triggering Directly from Pipeline 02 (CD)](#scenario-b-triggering-directly-from-pipeline-02-02-cd-release-orchestrators)
+    - [Scenario C: Triggering via API / Backstage IDP / ServiceNow ITSM](#scenario-c-triggering-via-api--backstage-idp--servicenow-itsm)
+    - [Parameter Selection Matrix](#parameter-selection-matrix)
+- [Decommissioning & Reinstallation](#decommissioning--reinstallation)
+  - [Clean Decommission](#clean-decommission)
+  - [Full Reinstallation](#full-reinstallation)
+- [References & Evidence Links](#references--evidence-links)
+
+---
+
 ## Executive Summary & Architecture Overview
 
 This repository provides an enterprise-grade, end-to-end **Infrastructure as Code (IaC)** blueprint and GitOps orchestration engine hosted on **Red Hat OpenShift Container Platform (OCP) 4.20+**. 
