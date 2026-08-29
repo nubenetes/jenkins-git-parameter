@@ -363,16 +363,76 @@ After deployment completes, the script outputs the operational routes:
 | **Grafana Dashboards**| `http://grafana.observability.svc.cluster.local:3000` | `admin` / `admin123!` |
 | **OTel Collector** | `http://otel-collector.observability.svc.cluster.local:4317` | *OTLP gRPC endpoint* |
 
-### 3. Triggering Pipelines
+### 3. Triggering Pipelines & `GLOBAL_VARS_REVISION` Selection
 
-#### Scenario A: Build Application from Selected Branch
-1. Navigate to Jenkins UI $\rightarrow$ `01-CI-Build-Pipelines` $\rightarrow$ `jhipster-microservice-ci-build`.
-2. Click **Build with Parameters**.
-3. Select the desired `APP_GIT_REVISION` branch/tag from the Git Parameter dropdown.
-4. Keep `TRIGGER_CD_RELEASE` checked to automatically hand off the built image to the Release Orchestrator.
+This platform provides flexible ways to select and propagate the **`GLOBAL_VARS_REVISION`** (branch, tag, or commit of the centralized `nubenetes-global-vars` repository) across both CI and CD pipelines.
 
-#### Scenario B: Trigger Multi-Cluster Release from Backstage or ServiceNow
-To trigger a release directly via API using a specific configuration version from `nubenetes-global-vars`:
+---
+
+#### Scenario A: Triggering from Pipeline `01` (`01-CI-Build-Pipelines`)
+When starting from the application CI build pipeline, developers select their application revision and specify which global configuration branch should be targeted downstream.
+
+1. **Navigate** to Jenkins UI $\rightarrow$ **`01-CI-Build-Pipelines`** $\rightarrow$ **`jhipster-microservice-ci-build`**.
+2. Click **"Build with Parameters"** in the sidebar.
+3. Configure the build parameters:
+   - **`APP_GIT_REVISION`** *(Git Parameter Dropdown)*: Select the application Git branch, tag, or PR from `jhipster-microservice` (e.g. `main`, `feature/payment-v2`, `v2.1.0`).
+   - **`TRIGGER_CD_RELEASE`** *(Checkbox, default `true`)*: Auto-triggers Pipeline `02` upon successful build and vulnerability scan.
+   - **`GLOBAL_VARS_BRANCH`** *(Text input, default `main`)*: **Enter the branch, tag, or commit of `nubenetes-global-vars` to use** (e.g. `main`, `release-2026.1`, `staging-env-v3`).
+   - **`TARGET_ENVIRONMENT`** *(Choice Dropdown)*: Select initial deployment environment (`dev`, `staging`, `prod`).
+4. Click **Build**.
+
+**How Parameter Propagation Works:**
+Pipeline 01 compiles the code, builds the container image with a unique SHA-based tag (e.g. `2.1.0-42-a1b2c3d`), pushes it to the OCP DEV registry, and automatically passes `GLOBAL_VARS_BRANCH` as `GLOBAL_VARS_REVISION` to Pipeline 02:
+
+```groovy
+build job: '02-CD-Release-Orchestrators/multi-cluster-release-orchestrator',
+    parameters: [
+        string(name: 'GLOBAL_VARS_REVISION', value: params.GLOBAL_VARS_BRANCH ?: 'main'),
+        string(name: 'APP_NAME', value: env.APP_NAME),
+        string(name: 'IMAGE_TAG', value: env.CALCULATED_TAG),
+        string(name: 'TARGET_ENVIRONMENT', value: params.TARGET_ENVIRONMENT ?: 'dev'),
+        booleanParam(name: 'AUTO_PROMOTE_TO_STAGING', value: true),
+        booleanParam(name: 'REQUIRE_PROD_APPROVAL', value: true),
+        string(name: 'TRIGGERED_BY', value: 'CI_PIPELINE'),
+        string(name: 'CHANGE_REQUEST_ID', value: "CI-AUTO-${BUILD_NUMBER}")
+    ],
+    wait: false
+```
+
+---
+
+#### Scenario B: Triggering Directly from Pipeline `02` (`02-CD-Release-Orchestrators`)
+When operators, release engineers, or DevOps teams want to deploy or promote an existing immutable container image against a specific configuration branch:
+
+1. **Navigate** to Jenkins UI $\rightarrow$ **`02-CD-Release-Orchestrators`** $\rightarrow$ **`multi-cluster-release-orchestrator`**.
+2. Click **"Build with Parameters"**.
+3. Configure the parameters:
+   - **`GLOBAL_VARS_REVISION`** *(Interactive Git Parameter Dropdown with live search)*:
+     - The Jenkins Git Parameter plugin dynamically queries `https://github.com/nubenetes/nubenetes-global-vars.git` in real-time.
+     - You can scroll or type to search all remote branches and tags (e.g. `main`, `v2.1.0-release`, `env/staging-hotfix`).
+   - **`APP_NAME`** *(Choice Dropdown)*: Select `jhipster-microservice` or `angular-frontend`.
+   - **`IMAGE_TAG`** *(Text input)*: Enter the pre-built image tag to deploy/promote (e.g. `2.1.0-42-a1b2c3d`).
+   - **`TARGET_ENVIRONMENT`** *(Choice)*: Select `dev`, `staging`, `prod`, or `full-promotion-chain`.
+   - **`AUTO_PROMOTE_TO_STAGING`** / **`REQUIRE_PROD_APPROVAL`**: Toggle automated stage gates.
+4. Click **Build**.
+
+**How Configuration Checkout Works:**
+In the first stage (`Initialize & Resolve Global Configuration`), Pipeline 02 checks out the global variables repository at the exact branch/tag you selected:
+
+```groovy
+dir('nubenetes-global-vars') {
+    checkout([
+        $class: 'GitSCM',
+        branches: [[name: "${params.GLOBAL_VARS_REVISION}"]],
+        userRemoteConfigs: [[url: 'https://github.com/nubenetes/nubenetes-global-vars.git']]
+    ])
+}
+```
+
+---
+
+#### Scenario C: Triggering via API / Backstage IDP / ServiceNow ITSM
+Because Pipeline 02 accepts `GLOBAL_VARS_REVISION` as a standard parameterized input, external developer portals and CMDB systems can trigger deployments programmatically:
 
 ```bash
 curl -X POST "https://jenkins-jenkins.apps.ocp-dev.nubenetes.internal/job/02-CD-Release-Orchestrators/job/multi-cluster-release-orchestrator/buildWithParameters" \
@@ -386,6 +446,17 @@ curl -X POST "https://jenkins-jenkins.apps.ocp-dev.nubenetes.internal/job/02-CD-
   --data-urlencode "TRIGGERED_BY=BACKSTAGE_IDP" \
   --data-urlencode "CHANGE_REQUEST_ID=CHG-2026-98124"
 ```
+
+---
+
+#### Parameter Selection Matrix
+
+| Trigger Entrypoint | Parameter Name | UI Element Type | Target Repository | Default Value | Propagation Logic |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Pipeline 01 (CI)** | `APP_GIT_REVISION` | **Git Parameter Dropdown** | Application Repo | `main` | Used to build source code |
+| **Pipeline 01 (CI)** | `GLOBAL_VARS_BRANCH` | Text Field with Default | `nubenetes-global-vars` | `main` | Forwarded to Pipeline 02 as `GLOBAL_VARS_REVISION` |
+| **Pipeline 02 (CD)** | `GLOBAL_VARS_REVISION` | **Git Parameter Dropdown** | `nubenetes-global-vars` | `main` | Cloned directly to drive GitOps manifests |
+| **External API / ITSM** | `GLOBAL_VARS_REVISION` | HTTP POST Parameter | `nubenetes-global-vars` | Explicit String | Injected into Pipeline 02 runtime |
 
 ---
 
