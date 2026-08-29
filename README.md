@@ -57,6 +57,13 @@
     - [Scenario C: Triggering via Jira Forms, CMDB (Assets) & ITSM / Backstage IDP](#scenario-c-triggering-via-jira-forms-cmdb-assets--itsm--backstage-idp)
       - [Why Jira Forms + CMDB is the Industry Standard for Cloud-Native Releases](#why-jira-forms--cmdb-is-the-industry-standard-for-cloud-native-releases)
     - [Parameter Selection Matrix](#parameter-selection-matrix)
+- [Enterprise Production Hardening & Advanced Best Practices](#️-enterprise-production-hardening--advanced-best-practices)
+  - [1. Supply Chain Security: Cosign Image Signing & SBOM Attestation (SLSA 3)](#1-supply-chain-security-cosign-image-signing--sbom-attestation-slsa-3)
+  - [2. Zero-Trust Secret Management: External Secrets Operator (ESO) + HashiCorp Vault](#2-zero-trust-secret-management-external-secrets-operator-eso--hashicorp-vault)
+  - [3. Dynamic Ephemeral PR Preview Environments with ArgoCD ApplicationSet](#3-dynamic-ephemeral-pr-preview-environments-with-argocd-applicationset)
+  - [4. Progressive Delivery with Argo Rollouts (Metric-Driven Canary)](#4-progressive-delivery-with-argo-rollouts-metric-driven-canary)
+  - [5. Automated Credential Rotation: GitHub App Authentication via JCasC](#5-automated-credential-rotation-github-app-authentication-via-jcasc)
+  - [Strategic Roadmap: Impact vs. Implementation Effort](#strategic-roadmap-impact-vs-implementation-effort)
 - [Decommissioning & Reinstallation](#decommissioning--reinstallation)
   - [Clean Decommission](#clean-decommission)
   - [Full Reinstallation](#full-reinstallation)
@@ -689,6 +696,147 @@ curl -X POST "https://jenkins-jenkins.apps.ocp-dev.nubenetes.internal/job/02-CD-
 | **Pipeline 01 (CI)** | `GLOBAL_VARS_BRANCH` | Text Field with Default | `jenkins-git-parameter-global-vars` | `main` | Forwarded to Pipeline 02 as `GLOBAL_VARS_REVISION` |
 | **Pipeline 02 (CD)** | `GLOBAL_VARS_REVISION` | **Git Parameter Dropdown** | `jenkins-git-parameter-global-vars` | `main` | Cloned directly to drive GitOps manifests |
 | **External API / ITSM** | `GLOBAL_VARS_REVISION` | HTTP POST Parameter | `jenkins-git-parameter-global-vars` | Explicit String | Injected into Pipeline 02 runtime |
+
+---
+
+## 🛡️ Enterprise Production Hardening & Advanced Best Practices
+
+To transition this platform into a mission-critical, regulated enterprise production environment, we have implemented **5 advanced architectural capabilities**:
+
+```
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│                    ENTERPRISE ARCHITECTURE ADVANCED CAPABILITIES                  │
+├───────────────────────────────┬───────────────────────────────────────────────────┤
+│ 1. Supply Chain Security      │ Cosign Keyless Signing, Syft SBOM & SLSA Level 3  │
+│ 2. Zero-Trust Secrets         │ External Secrets Operator (ESO) + HashiCorp Vault │
+│ 3. Dynamic PR Preview Envs    │ ArgoCD 3.5 ApplicationSet Pull Request Generator  │
+│ 4. Progressive Delivery       │ Argo Rollouts (Canary + Prometheus Metric Auto)   │
+│ 5. Automated Identity         │ GitHub App Short-Lived Token Rotation via JCasC   │
+└───────────────────────────────┴───────────────────────────────────────────────────┘
+```
+
+---
+
+### 1. Supply Chain Security: Cosign Image Signing & SBOM Attestation (SLSA 3)
+
+In multi-cluster promotion (`ocp-dev` $\rightarrow$ `ocp-staging` $\rightarrow$ `ocp-prod`), promoting raw container images without cryptographic signatures creates a software supply chain vulnerability.
+
+```mermaid
+flowchart LR
+    CI["🏗️ CI Build (Maven/Node)"]
+    Trivy["🛡️ Trivy Scan & Syft SBOM"]
+    Cosign["🔏 Cosign Signature & SLSA Attestation"]
+    Registry["📦 OCP DEV Registry"]
+    Skopeo["🚀 Skopeo Cross-Cluster Promotion"]
+    ClusterPolicy["🛡️ OpenShift Image Signature Policy"]
+    ProdEnv["☸️ OCP Production Workload"]
+
+    CI --> Trivy
+    Trivy --> Cosign
+    Cosign -->|Signed Digest & SBOM| Registry
+    Registry -->|Promote Digest + Sig| Skopeo
+    Skopeo --> ClusterPolicy
+    ClusterPolicy -->|Signature Verified Valid| ProdEnv
+```
+
+#### Implemented Components:
+- **Shared Library Step**: [`shared-library/vars/cosignSign.groovy`](shared-library/vars/cosignSign.groovy) automatically signs the image digest, generates CycloneDX SBOMs via Syft, and attaches in-toto SLSA build provenance statements.
+- **OpenShift Signature Policy**: [`security/openshift-image-signature-policy.yaml`](security/openshift-image-signature-policy.yaml) configures OpenShift's native `ClusterImagePolicy` to strictly reject unsigned images in `nubenetes-prod-apps`.
+
+---
+
+### 2. Zero-Trust Secret Management: External Secrets Operator (ESO) + HashiCorp Vault
+
+Plaintext database credentials, API tokens, and private keys should never be committed into Git repositories.
+
+```mermaid
+flowchart LR
+    Vault[("🔐 HashiCorp Vault<br/>(Raw Secrets & Passwords)")]
+    GlobalVars[("📦 Global Vars Repo<br/>(ExternalSecret Custom Resource)")]
+    ESO["⚡ External Secrets Operator<br/>(OpenShift Cluster Controller)"]
+    K8sSecret["🔑 Native Kubernetes Secret<br/>(Decrypted in Memory)"]
+    Pod["☸️ Application Pod"]
+
+    GlobalVars -->|GitOps Sync Manifest| ESO
+    ESO <-->|Kubernetes SA Token Auth| Vault
+    ESO -->|Creates / Rotates Secret| K8sSecret
+    K8sSecret -->|Mounted as Env / Volume| Pod
+```
+
+#### Implemented Components:
+- **ClusterSecretStore**: [`security/external-secrets-operator/cluster-secret-store-vault.yaml`](security/external-secrets-operator/cluster-secret-store-vault.yaml) integrates OpenShift service accounts directly with Vault using Kubernetes Auth.
+- **Declarative ExternalSecrets**: [`jenkins-git-parameter-global-vars/secrets/`](https://github.com/nubenetes/jenkins-git-parameter-global-vars/tree/main/secrets) declares Vault secret mappings (`external-secrets-prod.yaml`) that synchronize secrets into in-memory Kubernetes Secrets with automatic rotation.
+
+---
+
+### 3. Dynamic Ephemeral PR Preview Environments with ArgoCD ApplicationSet
+
+Supercharges **Pattern 1 (Inner-Loop)** by automatically provisioning isolated preview namespaces for active GitHub Pull Requests, and deleting them upon PR merge/close.
+
+```mermaid
+flowchart LR
+    Dev["👨‍💻 Developer"]
+    PR["📝 GitHub Pull Request #42"]
+    AppSet["⚡ ArgoCD ApplicationSet<br/>(Pull Request Generator)"]
+    PreviewNS["☸️ Ephemeral Preview Namespace<br/>(pr-42-preview)"]
+    Route["🌐 Preview Route URL<br/>pr-42-jhipster.apps.ocp-dev..."]
+
+    Dev -->|Opens PR| PR
+    PR -->|Webhook Notification| AppSet
+    AppSet -->|Provisions Namespace & Deploy| PreviewNS
+    PreviewNS -->|Generates Endpoint| Route
+    PR -.->|PR Merged or Closed| AppSet
+    AppSet -.->|Automatically Prunes & Deletes| PreviewNS
+```
+
+#### Implemented Component:
+- **PR Generator Manifest**: [`argocd-apps/applicationset-pull-request-preview.yaml`](argocd-apps/applicationset-pull-request-preview.yaml) dynamically generates preview applications for PRs labeled `preview-environment`.
+
+---
+
+### 4. Progressive Delivery with Argo Rollouts (Metric-Driven Canary)
+
+Replaces risky all-at-once rolling updates in STAGING and PROD with automated canary analysis that continuously measures Prometheus / OpenTelemetry telemetry.
+
+```mermaid
+flowchart LR
+    Ingress["🌐 OpenShift Route Traffic"]
+    Canary["🐣 Canary Pods (10% - 25% - 50%)<br/>v2.1.0 (New Image)"]
+    Stable["🛡️ Stable Pods (90% - 75% - 50%)<br/>v2.0.8 (Current Image)"]
+    Prometheus["📊 Prometheus / OTel Metrics<br/>(5xx Rate < 0.1%, p99 < 250ms)"]
+    RolloutCtrl["⚡ Argo Rollouts Controller"]
+
+    Ingress -->|Traffic Split| Canary
+    Ingress -->|Traffic Split| Stable
+    Canary -.->|Emits Telemetry| Prometheus
+    Prometheus -.->|Metric Evaluation| RolloutCtrl
+    RolloutCtrl -->|Pass: Promote to 100%<br/>Fail: Automated Rollback| Ingress
+```
+
+#### Implemented Components:
+- **AnalysisTemplate**: [`sample-apps/jhipster-microservice/rollout/analysis-template-prometheus.yaml`](sample-apps/jhipster-microservice/rollout/analysis-template-prometheus.yaml) evaluates HTTP 5xx error rate ($\le 0.1\%$) and p99 latency ($\le 250\text{ms}$).
+- **Rollout Definition**: [`sample-apps/jhipster-microservice/rollout/rollout-canary-jhipster.yaml`](sample-apps/jhipster-microservice/rollout/rollout-canary-jhipster.yaml) orchestrates progressive traffic steps (10% $\rightarrow$ 25% $\rightarrow$ 50% $\rightarrow$ 100%) with automated rollbacks on SLA violations.
+
+---
+
+### 5. Automated Credential Rotation: GitHub App Authentication via JCasC
+
+Replaces static, long-lived Personal Access Tokens (PATs) with fine-grained GitHub Apps that issue short-lived, self-rotating installation tokens (1-hour lifespan).
+
+#### Implemented Component:
+- **JCasC GitHub App Configuration**: [`jcasc/github-app-credentials.yaml`](jcasc/github-app-credentials.yaml) configures GitHub App ID, Private Key, and automated token renewal natively in Jenkins.
+
+---
+
+### Strategic Roadmap: Impact vs. Implementation Effort
+
+| Recommendation | Target Area | Business Value | Implemented Artifacts |
+| :--- | :--- | :--- | :--- |
+| **Cosign + SBOM (SLSA 3)** | Supply Chain Security | Cryptographic proof of origin & automated vulnerability tracking | [`cosignSign.groovy`](shared-library/vars/cosignSign.groovy), [`openshift-image-signature-policy.yaml`](security/openshift-image-signature-policy.yaml) |
+| **External Secrets Operator** | Zero-Trust Secrets | Eliminates plaintext secrets from Git repositories | [`cluster-secret-store-vault.yaml`](security/external-secrets-operator/cluster-secret-store-vault.yaml), [`secrets/`](https://github.com/nubenetes/jenkins-git-parameter-global-vars/tree/main/secrets) |
+| **GitHub App Auth** | Identity & Security | Short-lived, self-rotating credentials with least privilege | [`github-app-credentials.yaml`](jcasc/github-app-credentials.yaml) |
+| **ArgoCD PR Generator** | Developer Experience | 1-click preview environments per pull request | [`applicationset-pull-request-preview.yaml`](argocd-apps/applicationset-pull-request-preview.yaml) |
+| **Argo Rollouts (Canary)** | Production Resiliency | Automated metric analysis with zero-downtime rollback | [`rollout-canary-jhipster.yaml`](sample-apps/jhipster-microservice/rollout/rollout-canary-jhipster.yaml), [`analysis-template-prometheus.yaml`](sample-apps/jhipster-microservice/rollout/analysis-template-prometheus.yaml) |
 
 ---
 

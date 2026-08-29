@@ -1,0 +1,52 @@
+# ==============================================================================
+# ArgoCD 3.5 ApplicationSet: GitHub Pull Request Preview Generator
+# Dynamically creates isolated ephemeral namespaces for active PRs
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: preview-pull-requests
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: nubenetes-gitops
+spec:
+  generators:
+    - pullRequest:
+        github:
+          owner: nubenetes
+          repo: jhipster-microservice
+          labels:
+            - preview-environment
+          tokenRef:
+            secretName: github-app-secret
+            key: token
+        requeueAfterSeconds: 60
+  template:
+    metadata:
+      name: 'preview-pr-{{number}}-jhipster'
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: default
+      source:
+        repoURL: 'https://github.com/nubenetes/jenkins-git-parameter-global-vars.git'
+        targetRevision: 'main'
+        path: 'helm-values/jhipster-microservice'
+        helm:
+          valueFiles:
+            - values-dev.yaml
+          parameters:
+            - name: image.tag
+              value: 'pr-{{number}}-{{head_short_sha}}'
+            - name: ingress.host
+              value: 'pr-{{number}}-jhipster.apps.ocp-dev.nubenetes.internal'
+      destination:
+        server: 'https://kubernetes.default.svc'
+        namespace: 'pr-{{number}}-preview'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ApplyOutOfSyncOnly=true
