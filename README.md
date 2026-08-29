@@ -70,51 +70,51 @@ The solution addresses a core enterprise challenge: **how to build, govern, prom
 
 ```mermaid
 flowchart TB
-    subgraph DeveloperWorkspace["Developer & External Systems"]
-        Dev["👩‍💻 Developer / Release Mgr"]
-        Backstage["🏛️ Backstage IDP"]
-        ITSM["🎫 ServiceNow / Jira CMDB"]
+    subgraph DeveloperWorkspace["1. Developer & External Systems"]
+        Dev["👩‍💻 Developer / Ops"]
+        Backstage["🏛️ Backstage IDP<br/>(Software Catalog)"]
+        ITSM["🎫 Jira Service Mgmt<br/>& ServiceNow CMDB"]
     end
 
-    subgraph OCP_DEV["OpenShift Cluster 1: DEV (Control Plane & Dev Apps)"]
+    subgraph OCP_DEV["OpenShift Cluster 1: DEV (Control Plane & Workloads)"]
         direction TB
-        subgraph JenkinsPlatform["Jenkins Enterprise Controller (JCasC + Job DSL)"]
-            Master["Jenkins Controller (2.492.2 LTS)"]
-            Seed["00-Seed-Job-Orchestrator"]
-            CIJob["01-CI-Build-Pipeline<br>(Git Parameter: App Repo)"]
-            CDJob["02-CD-Release-Orchestrator<br>(Git Parameter: Global Vars Repo)"]
+        subgraph JenkinsPlatform["Jenkins Controller (JCasC & Job DSL)"]
+            Master["Jenkins Controller<br/>(2.492.2 LTS)"]
+            Seed["00-Seed-Job<br/>Orchestrator"]
+            CIJob["01-CI-Build-Pipeline<br/>(Git Param: App Repo)"]
+            CDJob["02-CD-Release-Orchestrator<br/>(Git Param: Global Vars)"]
         end
 
         subgraph Agents["Ephemeral Kubernetes Agent Pods"]
-            MavenAgent["maven-jdk21 Agent"]
-            GitOpsAgent["argocd-gitops Agent (Skopeo & CLI)"]
+            MavenAgent["maven-jdk21 Agent<br/>(Build & Test)"]
+            GitOpsAgent["argocd-gitops Agent<br/>(Skopeo & Argo CLI)"]
         end
 
         subgraph OCPDevRegistry["OCP DEV Internal Registry"]
-            DevReg["image-registry:5000 / nubenetes-dev-apps"]
+            DevReg["image-registry:5000<br/>nubenetes-dev-apps"]
         end
 
         subgraph ArgoCDMaster["ArgoCD 3.5 Control Plane"]
-            ArgoServer["ArgoCD Server & ApplicationSets"]
+            ArgoServer["ArgoCD Server &<br/>ApplicationSets"]
         end
 
         subgraph ObservabilityStack["Full-Stack Observability"]
-            OTel["OpenTelemetry Collector"]
-            Prom["Prometheus Server"]
-            Grafana["Grafana Dashboards"]
+            OTel["OpenTelemetry<br/>Collector (OTLP)"]
+            Prom["Prometheus<br/>Server"]
+            Grafana["Grafana<br/>Dashboards"]
         end
 
-        DevApps["DEV Workloads (nubenetes-dev-apps)"]
+        DevApps["DEV Workloads<br/>(nubenetes-dev-apps)"]
     end
 
     subgraph OCP_STG["OpenShift Cluster 2: STAGING (UAT)"]
-        StgReg["OCP Staging Internal Registry"]
-        StgApps["Staging Workloads (nubenetes-staging-apps)"]
+        StgReg["OCP Staging Registry"]
+        StgApps["Staging Workloads<br/>(nubenetes-staging-apps)"]
     end
 
     subgraph OCP_PRD["OpenShift Cluster 3: PROD (High Availability)"]
-        PrdReg["OCP Prod Internal Registry"]
-        PrdApps["Production Workloads (nubenetes-prod-apps)"]
+        PrdReg["OCP Prod Registry"]
+        PrdApps["Production Workloads<br/>(nubenetes-prod-apps)"]
     end
 
     Dev -->|Selects Branch or Tag| CIJob
@@ -129,15 +129,15 @@ flowchart TB
     CDJob -->|Launches| GitOpsAgent
     GitOpsAgent -->|Skopeo Copy| StgReg
     GitOpsAgent -->|Skopeo Copy| PrdReg
-    GitOpsAgent -->|Sync and Health Check| ArgoServer
+    GitOpsAgent -->|Sync & Health Check| ArgoServer
 
     ArgoServer -->|GitOps Deploy| DevApps
     ArgoServer -->|GitOps Deploy| StgApps
-    ArgoServer -->|GitOps Deploy: Sync Waves| PrdApps
+    ArgoServer -->|Sync Waves Deploy| PrdApps
 
     Master -.->|OTLP Traces| OTel
     OTel -.->|Forward Spans| Grafana
-    Master -.->|Metrics: prometheus| Prom
+    Master -.->|Metrics Export| Prom
     Prom -.->|Metrics Scrape| Grafana
 ```
 
@@ -466,36 +466,53 @@ dir('jenkins-git-parameter-global-vars') {
 In enterprise environments, production deployments and cross-cluster promotions are rarely triggered manually by individual developers clicking buttons in a CI tool. Instead, organizations enforce structured, auditable **IT Service Management (ITSM)** workflows using **Jira Service Management (JSM) Forms**, **Jira Assets / CMDB**, **ServiceNow**, or **Backstage Developer Portals**.
 
 ```mermaid
-flowchart LR
-    subgraph GovernanceLayer["1. Enterprise Governance & CMDB"]
-        JiraUser["👨‍💻 Release Engineer / Developer"]
-        JiraForm["📝 Jira Release Form<br>(Selects App, Version & Env)"]
-        CMDB[("🗄️ Jira CMDB / Assets<br>(Apps, Clusters, SLAs, Owners)")]
-        CAB["🛡️ Change Advisory Board (CAB)<br>(Automated / Manual Approval)"]
+flowchart TB
+    subgraph SelfServicePortals["1. Governed Self-Service & Developer Portals"]
+        direction LR
+        subgraph JiraTrack["ITSM & Governance Track"]
+            JiraUser["👨‍💻 Release Engineer"]
+            JiraForm["📝 Jira Service Mgmt Form<br/>(Selects App, Version & Env)"]
+            CMDB[("🗄️ Jira CMDB / Assets<br/>(Apps, Clusters, SLAs, CAB)")]
+            CAB["🛡️ Change Advisory Board (CAB)<br/>(Approval Workflow)"]
+            JiraWebhook["⚡ Jira Automation Webhook"]
+        end
+
+        subgraph BackstageTrack["Developer Portal Track"]
+            DevUser["👩‍💻 Application Developer"]
+            BackstageUI["🏛️ Backstage IDP Portal<br/>(Self-Service Software Template)"]
+            BackstageCatalog[("📚 Backstage Software Catalog<br/>(Components, APIs, Dependencies)")]
+            BackstagePlugin["⚡ Backstage Jenkins Plugin<br/>(REST API Dispatch)"]
+        end
     end
 
-    subgraph OrchestrationLayer["2. CI/CD Orchestration"]
-        JiraAutomation["⚡ Jira Automation Webhook"]
-        JenkinsCD["🚀 Jenkins 02-CD-Release-Orchestrator<br>(GLOBAL_VARS_REVISION)"]
+    subgraph CI_CD_Layer["2. CI/CD Release Orchestration Engine"]
+        JenkinsCD["🚀 Jenkins 02-CD-Release-Orchestrator<br/>(Parameter: GLOBAL_VARS_REVISION)"]
+        GlobalVars[("📦 jenkins-git-parameter-global-vars<br/>(Centralized Environment Config)")]
     end
 
-    subgraph GitOpsDeploymentLayer["3. Multi-Cluster GitOps & Observability"]
-        GlobalVars[("📦 Global Vars Repo")]
-        Argo["🐙 ArgoCD 3.5 Engine"]
-        OCP["☸️ OpenShift (DEV / STG / PROD)"]
-        OTel["📊 OpenTelemetry & Grafana"]
+    subgraph DeploymentObservabilityLayer["3. Multi-Cluster GitOps & Telemetry"]
+        Argo["🐙 ArgoCD 3.5 Controller<br/>(Multi-Cluster Sync Waves)"]
+        OCP["☸️ OpenShift 4.20+ Clusters<br/>(DEV ➔ STAGING ➔ PROD)"]
+        OTel["📊 OpenTelemetry & Grafana<br/>(Traces, Metrics & Logs)"]
     end
 
-    JiraUser -->|Fills Release Request| JiraForm
-    JiraForm <-->|Pulls CIs, Clusters & Approvers| CMDB
-    JiraForm -->|Submits Ticket| CAB
-    CAB -->|Approves Release| JiraAutomation
-    JiraAutomation -->|POST buildWithParameters| JenkinsCD
-    JenkinsCD -->|Checks out Revision| GlobalVars
-    JenkinsCD -->|Promotes & Syncs| Argo
-    Argo -->|Deploys Workload| OCP
-    JenkinsCD -.->|Emits Traces| OTel
-    JenkinsCD -.->|Updates Status & Closes Ticket| JiraForm
+    JiraUser -->|Submits Release Form| JiraForm
+    JiraForm <-->|Validates CIs & Approvers| CMDB
+    JiraForm -->|Requests Change Approval| CAB
+    CAB -->|Approves Change Ticket| JiraWebhook
+    JiraWebhook -->|POST /buildWithParameters| JenkinsCD
+
+    DevUser -->|Executes Release Action| BackstageUI
+    BackstageUI <-->|Fetches Entity Metadata| BackstageCatalog
+    BackstageUI -->|Triggers Action| BackstagePlugin
+    BackstagePlugin -->|POST /buildWithParameters| JenkinsCD
+
+    JenkinsCD -->|Clones Selected Revision| GlobalVars
+    JenkinsCD -->|Orchestrates GitOps Sync| Argo
+    Argo -->|Applies Manifests| OCP
+    JenkinsCD -.->|Emits W3C Distributed Spans| OTel
+    JenkinsCD -.->|Updates Issue & Closes Ticket| JiraForm
+    JenkinsCD -.->|Reports Build & Deploy Status| BackstageUI
 ```
 
 ---
