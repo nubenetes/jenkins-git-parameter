@@ -170,12 +170,12 @@ When engineering teams attempt to introduce multiple `gitParameter` dropdowns in
 
 ```mermaid
 flowchart TB
-    subgraph UI_Phase["1. Pre-Execution Phase (Jenkins Controller)"]
+    subgraph UI_Phase["1. Pre-Execution Phase (Jenkins Master)"]
         direction TB
-        User["👤 User opens<br/>'Build with Parameters'"]
-        Master["⚙️ Jenkins Master reads<br/>Job XML (SCM Definition)"]
-        GitParam["🔍 git-parameter plugin runs<br/>'git ls-remote' on Master"]
-        Dropdown["📋 Renders Dynamic Dropdown<br/>in User's Browser"]
+        User["👤 User opens<br/>Build Form in UI"]
+        Master["⚙️ Controller reads<br/>Job XML SCM Config"]
+        GitParam["🔍 git-parameter runs<br/>'git ls-remote'"]
+        Dropdown["📋 Render Parameter<br/>Dropdown in UI"]
 
         User --> Master
         Master --> GitParam
@@ -184,13 +184,13 @@ flowchart TB
 
     subgraph Runtime_Phase["2. Runtime Execution Phase (Agent Pod)"]
         direction TB
-        AllocAgent["☸️ Ephemeral Agent Pod<br/>Allocated on Kubernetes"]
-        RunStage["📦 Pipeline Stage runs:<br/>checkout(secondary_repo)"]
+        AllocAgent["☸️ Ephemeral Agent<br/>Pod Allocated"]
+        RunStage["📦 Pipeline Stage runs:<br/>checkout(repo-2)"]
 
         AllocAgent --> RunStage
     end
 
-    Dropdown -.->|"❌ Blindspot: Dynamic checkouts in stages<br/>are invisible to Master at UI render time"| RunStage
+    Dropdown -.->|"❌ Stage checkouts are<br/>invisible at render time"| RunStage
 ```
 
 ##### Root Cause Analysis: The Three Jenkins Architectural Constraints
