@@ -52,7 +52,8 @@
   - [3. Triggering Pipelines & `GLOBAL_VARS_REVISION` Selection](#3-triggering-pipelines--global_vars_revision-selection)
     - [Scenario A: Triggering from Pipeline 01 (CI)](#scenario-a-triggering-from-pipeline-01-01-ci-build-pipelines)
     - [Scenario B: Triggering Directly from Pipeline 02 (CD)](#scenario-b-triggering-directly-from-pipeline-02-02-cd-release-orchestrators)
-    - [Scenario C: Triggering via API / Backstage IDP / ServiceNow ITSM](#scenario-c-triggering-via-api--backstage-idp--servicenow-itsm)
+    - [Scenario C: Triggering via Jira Forms, CMDB (Assets) & ITSM / Backstage IDP](#scenario-c-triggering-via-jira-forms-cmdb-assets--itsm--backstage-idp)
+      - [Why Jira Forms + CMDB is the Industry Standard for Cloud-Native Releases](#why-jira-forms--cmdb-is-the-industry-standard-for-cloud-native-releases)
     - [Parameter Selection Matrix](#parameter-selection-matrix)
 - [Decommissioning & Reinstallation](#decommissioning--reinstallation)
   - [Clean Decommission](#clean-decommission)
@@ -460,10 +461,70 @@ dir('jenkins-git-parameter-global-vars') {
 
 ---
 
-#### Scenario C: Triggering via API / Backstage IDP / ServiceNow ITSM
-Because Pipeline 02 accepts `GLOBAL_VARS_REVISION` as a standard parameterized input, external developer portals and CMDB systems can trigger deployments programmatically:
+#### Scenario C: Triggering via Jira Forms, CMDB (Assets) & ITSM / Backstage IDP
+
+In enterprise environments, production deployments and cross-cluster promotions are rarely triggered manually by individual developers clicking buttons in a CI tool. Instead, organizations enforce structured, auditable **IT Service Management (ITSM)** workflows using **Jira Service Management (JSM) Forms**, **Jira Assets / CMDB**, **ServiceNow**, or **Backstage Developer Portals**.
+
+```mermaid
+flowchart LR
+    subgraph GovernanceLayer["1. Enterprise Governance & CMDB"]
+        JiraUser["👨‍💻 Release Engineer / Developer"]
+        JiraForm["📝 Jira Release Form<br>(Selects App, Version & Env)"]
+        CMDB[("🗄️ Jira CMDB / Assets<br>(Apps, Clusters, SLAs, Owners)")]
+        CAB["🛡️ Change Advisory Board (CAB)<br>(Automated / Manual Approval)"]
+    end
+
+    subgraph OrchestrationLayer["2. CI/CD Orchestration"]
+        JiraAutomation["⚡ Jira Automation Webhook"]
+        JenkinsCD["🚀 Jenkins 02-CD-Release-Orchestrator<br>(GLOBAL_VARS_REVISION)"]
+    end
+
+    subgraph GitOpsDeploymentLayer["3. Multi-Cluster GitOps & Observability"]
+        GlobalVars[("📦 Global Vars Repo")]
+        Argo["🐙 ArgoCD 3.5 Engine"]
+        OCP["☸️ OpenShift (DEV / STG / PROD)"]
+        OTel["📊 OpenTelemetry & Grafana"]
+    end
+
+    JiraUser -->|Fills Release Request| JiraForm
+    JiraForm <-->|Pulls CIs, Clusters & Approvers| CMDB
+    JiraForm -->|Submits Ticket| CAB
+    CAB -->|Approves Release| JiraAutomation
+    JiraAutomation -->|POST buildWithParameters| JenkinsCD
+    JenkinsCD -->|Checks out Revision| GlobalVars
+    JenkinsCD -->|Promotes & Syncs| Argo
+    Argo -->|Deploys Workload| OCP
+    JenkinsCD -.->|Emits Traces| OTel
+    JenkinsCD -.->|Updates Status & Closes Ticket| JiraForm
+```
+
+---
+
+#### Why Jira Forms + CMDB is the Industry Standard for Cloud-Native Releases
+
+1. **Centralized Configuration Management Database (CMDB) as Single Source of Truth**:
+   - Modern IT organizations manage hundreds of microservices. The CMDB maintains a single source of truth for **Application Metadata**, **Business Criticality (Tier 1 vs Tier 3)**, **Regulatory Scope (PCI-DSS, HIPAA, SOX, GDPR)**, **Data Classification**, and **Assigned Service Owners**.
+   - Connecting Jira Forms to CMDB Assets ensures developers only select validated, registered applications, compliant target clusters, and authorized environment variables.
+
+2. **Schema-Driven, Governed Self-Service via Jira Forms**:
+   - Rather than providing direct cluster admin or Jenkins master access to developers, engineers fill out an intuitive **Jira Release Request Form**.
+   - When the user selects an application (e.g. `jhipster-microservice`), Jira's schema-driven form dynamically queries the CMDB to auto-populate:
+     - The approved GitOps configuration repository (`jenkins-git-parameter-global-vars`).
+     - The target OpenShift cluster topology (`ocp-dev`, `ocp-staging`, `ocp-prod`).
+     - The required approval gates (e.g., automated QA lead sign-off for STAGING, automated CAB approval for standard PROD changes, or VP approval for emergency hotfixes).
+
+3. **Segregation of Duties (SoD) & Regulatory Audit Compliance**:
+   - Regulated industries require strict **Segregation of Duties** (the engineer who writes the code cannot be the sole approver of the production release).
+   - Jira Forms + CMDB enforce immutable change records where the Jira Ticket ID (`CHG-2026-98124`) tracks:
+     - Exact Git commit SHA and Container Image Digest.
+     - Selected Global Configuration branch/tag (`GLOBAL_VARS_REVISION`).
+     - Test execution evidence, security scan (Trivy/SonarQube) results, and CAB approval timestamps.
+
+4. **Automated Webhook Dispatch to Jenkins with Parameter Injection**:
+   - When the Jira Change Request reaches the `Approved` state, a **Jira Automation Rule** fires an HTTP POST webhook to Jenkins' `buildWithParameters` endpoint, injecting the form inputs directly:
 
 ```bash
+# Jira Automation / ServiceNow REST API Dispatch Payload
 curl -X POST "https://jenkins-jenkins.apps.ocp-dev.nubenetes.internal/job/02-CD-Release-Orchestrators/job/multi-cluster-release-orchestrator/buildWithParameters" \
   --user "ci-service:service123!" \
   --data-urlencode "GLOBAL_VARS_REVISION=v2.1.0-release" \
@@ -472,9 +533,13 @@ curl -X POST "https://jenkins-jenkins.apps.ocp-dev.nubenetes.internal/job/02-CD-
   --data-urlencode "TARGET_ENVIRONMENT=full-promotion-chain" \
   --data-urlencode "AUTO_PROMOTE_TO_STAGING=true" \
   --data-urlencode "REQUIRE_PROD_APPROVAL=true" \
-  --data-urlencode "TRIGGERED_BY=BACKSTAGE_IDP" \
+  --data-urlencode "TRIGGERED_BY=JIRA_FORMS_CMDB" \
   --data-urlencode "CHANGE_REQUEST_ID=CHG-2026-98124"
 ```
+
+5. **Closed-Loop Feedback & Automated Ticket Closure**:
+   - During pipeline execution, Jenkins publishes progress comments to the Jira issue via the Jira REST API.
+   - Upon successful multi-cluster deployment and ArgoCD health verification, Jenkins updates the Jira issue with the Skopeo image promotion digest, OpenShift Route URL, and OpenTelemetry trace link, automatically transitioning the Jira ticket to **`Closed / Resolved`**.
 
 ---
 
