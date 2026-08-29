@@ -18,7 +18,7 @@ pipeline {
     }
 
     environment {
-        GLOBAL_VARS_REPO   = 'https://github.com/nubenetes/nubenetes-global-vars.git'
+        GLOBAL_VARS_REPO   = 'https://github.com/nubenetes/jenkins-git-parameter-global-vars.git'
         ARGOCD_SERVER      = 'argocd-server.argocd.svc.cluster.local:443'
         DEV_CLUSTER        = 'ocp-dev'
         STAGING_CLUSTER    = 'ocp-staging'
@@ -43,7 +43,7 @@ pipeline {
 
                     // Clone Global Configuration / Environment Variables Repository
                     echo "===> Checking out Global Vars Repository at revision: ${params.GLOBAL_VARS_REVISION}"
-                    dir('nubenetes-global-vars') {
+                    dir('jenkins-git-parameter-global-vars') {
                         checkout([
                             $class: 'GitSCM',
                             branches: [[name: "${params.GLOBAL_VARS_REVISION}"]],
@@ -74,7 +74,7 @@ pipeline {
                         envName: 'dev',
                         appName: params.APP_NAME,
                         imageTag: params.IMAGE_TAG,
-                        configDir: 'nubenetes-global-vars'
+                        configDir: 'jenkins-git-parameter-global-vars'
                     )
 
                     echo "===> [STAGE: DEV] Triggering ArgoCD 3.5 Sync for DEV Application..."
@@ -137,7 +137,7 @@ pipeline {
                         envName: 'staging',
                         appName: params.APP_NAME,
                         imageTag: params.IMAGE_TAG,
-                        configDir: 'nubenetes-global-vars'
+                        configDir: 'jenkins-git-parameter-global-vars'
                     )
 
                     echo "===> [STAGE: STAGING] Triggering ArgoCD 3.5 Sync for STAGING Application..."
@@ -224,7 +224,7 @@ pipeline {
                         envName: 'prod',
                         appName: params.APP_NAME,
                         imageTag: params.IMAGE_TAG,
-                        configDir: 'nubenetes-global-vars'
+                        configDir: 'jenkins-git-parameter-global-vars'
                     )
 
                     echo "===> [STAGE: PROD] Triggering ArgoCD 3.5 Sync with Sync Waves & Health Gates..."

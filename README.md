@@ -147,7 +147,7 @@ flowchart TB
 ### 1. Multi-Repository Git Parameter Investigation: The Decoupled 2-Pipeline Pattern
 
 #### The Core Problem
-In enterprise architectures, microservices separate application code (`app-repo`) from centralized environmental configuration, secrets, cluster definitions, and helm values (`nubenetes-global-vars`). 
+In enterprise architectures, microservices separate application code (`app-repo`) from centralized environmental configuration, secrets, cluster definitions, and helm values (`jenkins-git-parameter-global-vars`). 
 
 When applying the Jenkins `git-parameter` plugin to a pipeline that needs to check out **both** repositories, a fundamental limitation arises in standard Jenkins Declarative Pipelines:
 1. **Parameter Evaluation Lifecycle**: Jenkins evaluates job parameters (including remote branch/tag queries via Git Parameter) **before** workspace allocation and before the `Jenkinsfile` executes.
@@ -184,7 +184,7 @@ sequenceDiagram
         Dev->>CD: Direct REST API / UI Trigger with (GLOBAL_VARS_REVISION, IMAGE_TAG)
     end
 
-    CD->>CD: Checkout nubenetes-global-vars @ GLOBAL_VARS_REVISION
+    CD->>CD: Checkout jenkins-git-parameter-global-vars @ GLOBAL_VARS_REVISION
     CD->>Argo: Update DEV manifests & Sync ArgoCD DEV App
     Argo->>Argo: Validate Health on OCP DEV Cluster
 
@@ -346,7 +346,7 @@ jenkins-git-parameter/
 │   │   ├── pom.xml
 │   │   ├── src/...
 │   │   └── k8s/                             # Kustomize base & overlays (dev, staging, prod)
-│   └── nubenetes-global-vars/               # Centralized Global Configuration repository
+│   └── jenkins-git-parameter-global-vars/               # Centralized Global Configuration repository
 │       ├── environments/{dev,staging,prod}.yaml
 │       └── clusters/{ocp-dev,ocp-staging,ocp-prod}.yaml
 ├── observability/
@@ -394,7 +394,7 @@ After deployment completes, the script outputs the operational routes:
 
 ### 3. Triggering Pipelines & `GLOBAL_VARS_REVISION` Selection
 
-This platform provides flexible ways to select and propagate the **`GLOBAL_VARS_REVISION`** (branch, tag, or commit of the centralized `nubenetes-global-vars` repository) across both CI and CD pipelines.
+This platform provides flexible ways to select and propagate the **`GLOBAL_VARS_REVISION`** (branch, tag, or commit of the centralized `jenkins-git-parameter-global-vars` repository) across both CI and CD pipelines.
 
 ---
 
@@ -406,7 +406,7 @@ When starting from the application CI build pipeline, developers select their ap
 3. Configure the build parameters:
    - **`APP_GIT_REVISION`** *(Git Parameter Dropdown)*: Select the application Git branch, tag, or PR from `jhipster-microservice` (e.g. `main`, `feature/payment-v2`, `v2.1.0`).
    - **`TRIGGER_CD_RELEASE`** *(Checkbox, default `true`)*: Auto-triggers Pipeline `02` upon successful build and vulnerability scan.
-   - **`GLOBAL_VARS_BRANCH`** *(Text input, default `main`)*: **Enter the branch, tag, or commit of `nubenetes-global-vars` to use** (e.g. `main`, `release-2026.1`, `staging-env-v3`).
+   - **`GLOBAL_VARS_BRANCH`** *(Text input, default `main`)*: **Enter the branch, tag, or commit of `jenkins-git-parameter-global-vars` to use** (e.g. `main`, `release-2026.1`, `staging-env-v3`).
    - **`TARGET_ENVIRONMENT`** *(Choice Dropdown)*: Select initial deployment environment (`dev`, `staging`, `prod`).
 4. Click **Build**.
 
@@ -437,7 +437,7 @@ When operators, release engineers, or DevOps teams want to deploy or promote an 
 2. Click **"Build with Parameters"**.
 3. Configure the parameters:
    - **`GLOBAL_VARS_REVISION`** *(Interactive Git Parameter Dropdown with live search)*:
-     - The Jenkins Git Parameter plugin dynamically queries `https://github.com/nubenetes/nubenetes-global-vars.git` in real-time.
+     - The Jenkins Git Parameter plugin dynamically queries `https://github.com/nubenetes/jenkins-git-parameter-global-vars.git` in real-time.
      - You can scroll or type to search all remote branches and tags (e.g. `main`, `v2.1.0-release`, `env/staging-hotfix`).
    - **`APP_NAME`** *(Choice Dropdown)*: Select `jhipster-microservice` or `angular-frontend`.
    - **`IMAGE_TAG`** *(Text input)*: Enter the pre-built image tag to deploy/promote (e.g. `2.1.0-42-a1b2c3d`).
@@ -449,11 +449,11 @@ When operators, release engineers, or DevOps teams want to deploy or promote an 
 In the first stage (`Initialize & Resolve Global Configuration`), Pipeline 02 checks out the global variables repository at the exact branch/tag you selected:
 
 ```groovy
-dir('nubenetes-global-vars') {
+dir('jenkins-git-parameter-global-vars') {
     checkout([
         $class: 'GitSCM',
         branches: [[name: "${params.GLOBAL_VARS_REVISION}"]],
-        userRemoteConfigs: [[url: 'https://github.com/nubenetes/nubenetes-global-vars.git']]
+        userRemoteConfigs: [[url: 'https://github.com/nubenetes/jenkins-git-parameter-global-vars.git']]
     ])
 }
 ```
@@ -483,9 +483,9 @@ curl -X POST "https://jenkins-jenkins.apps.ocp-dev.nubenetes.internal/job/02-CD-
 | Trigger Entrypoint | Parameter Name | UI Element Type | Target Repository | Default Value | Propagation Logic |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Pipeline 01 (CI)** | `APP_GIT_REVISION` | **Git Parameter Dropdown** | Application Repo | `main` | Used to build source code |
-| **Pipeline 01 (CI)** | `GLOBAL_VARS_BRANCH` | Text Field with Default | `nubenetes-global-vars` | `main` | Forwarded to Pipeline 02 as `GLOBAL_VARS_REVISION` |
-| **Pipeline 02 (CD)** | `GLOBAL_VARS_REVISION` | **Git Parameter Dropdown** | `nubenetes-global-vars` | `main` | Cloned directly to drive GitOps manifests |
-| **External API / ITSM** | `GLOBAL_VARS_REVISION` | HTTP POST Parameter | `nubenetes-global-vars` | Explicit String | Injected into Pipeline 02 runtime |
+| **Pipeline 01 (CI)** | `GLOBAL_VARS_BRANCH` | Text Field with Default | `jenkins-git-parameter-global-vars` | `main` | Forwarded to Pipeline 02 as `GLOBAL_VARS_REVISION` |
+| **Pipeline 02 (CD)** | `GLOBAL_VARS_REVISION` | **Git Parameter Dropdown** | `jenkins-git-parameter-global-vars` | `main` | Cloned directly to drive GitOps manifests |
+| **External API / ITSM** | `GLOBAL_VARS_REVISION` | HTTP POST Parameter | `jenkins-git-parameter-global-vars` | Explicit String | Injected into Pipeline 02 runtime |
 
 ---
 

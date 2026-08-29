@@ -18,7 +18,7 @@ pipeline {
     }
 
     environment {
-        GLOBAL_VARS_REPO = 'https://github.com/nubenetes/nubenetes-global-vars.git'
+        GLOBAL_VARS_REPO = 'https://github.com/nubenetes/jenkins-git-parameter-global-vars.git'
         ARGOCD_SERVER    = 'argocd-server.argocd.svc.cluster.local:443'
     }
 

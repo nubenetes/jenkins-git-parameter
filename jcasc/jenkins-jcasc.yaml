@@ -44,7 +44,7 @@ jenkins:
           - key: "PLATFORM_DOMAIN"
             value: "apps.ocp-dev.nubenetes.internal"
           - key: "GLOBAL_VARS_REPO"
-            value: "https://github.com/nubenetes/nubenetes-global-vars.git"
+            value: "https://github.com/nubenetes/jenkins-git-parameter-global-vars.git"
           - key: "ARGOCD_SERVER_GRPC"
             value: "argocd-server.argocd.svc.cluster.local:443"
           - key: "DEV_REGISTRY_HOST"

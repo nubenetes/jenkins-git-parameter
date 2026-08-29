@@ -7,7 +7,7 @@ def call(Map config = [:]) {
     def envName   = config.envName ?: error("gitopsCommit requires 'envName'")
     def appName   = config.appName ?: error("gitopsCommit requires 'appName'")
     def imageTag  = config.imageTag ?: error("gitopsCommit requires 'imageTag'")
-    def configDir = config.configDir ?: 'nubenetes-global-vars'
+    def configDir = config.configDir ?: 'jenkins-git-parameter-global-vars'
 
     echo "📝 [GitOps Update] Updating image tag for '${appName}' in environment '${envName}' to '${imageTag}'..."
 

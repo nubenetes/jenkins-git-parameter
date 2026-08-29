@@ -2,7 +2,7 @@
 // Job DSL: CD Release Orchestration & Multi-Cluster Promotion Pipelines
 // ==============================================================================
 
-def globalVarsRepoUrl = 'https://github.com/nubenetes/nubenetes-global-vars.git'
+def globalVarsRepoUrl = 'https://github.com/nubenetes/jenkins-git-parameter-global-vars.git'
 
 pipelineJob("02-CD-Release-Orchestrators/multi-cluster-release-orchestrator") {
     description('''
