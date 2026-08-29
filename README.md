@@ -486,7 +486,7 @@ flowchart TB
     end
 
     subgraph CI_CD_Layer["2. CI/CD Release Orchestration Engine"]
-        JenkinsCD["🚀 02-CD-Release-Orchestrator<br/>(Param: GLOBAL_VARS_REVISION)"]
+        JenkinsCD["🚀 02-CD-Release-Orchestrator<br/>(Git Param: Global Vars)"]
         GlobalVars[("📦 Global Variables Repo<br/>(Environment Configs)")]
     end
 
