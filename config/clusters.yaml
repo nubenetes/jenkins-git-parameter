@@ -1,0 +1,61 @@
+# ==============================================================================
+# OpenShift Multi-Cluster Topology Configuration
+# github.com/nubenetes/jenkins-git-parameter
+# ==============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nubenetes-cluster-topology
+  namespace: jenkins
+data:
+  clusters.yaml: |
+    topologyVersion: "2026.1"
+    primaryCluster: "ocp-dev"
+    clusters:
+      - name: "ocp-dev"
+        environment: "dev"
+        role: "ci-cd-and-workloads"
+        server: "https://api.ocp-dev.nubenetes.internal:6443"
+        ingressDomain: "apps.ocp-dev.nubenetes.internal"
+        registry:
+          internal: "image-registry.openshift-image-registry.svc:5000"
+          external: "default-route-openshift-image-registry.apps.ocp-dev.nubenetes.internal"
+          namespacePrefix: "nubenetes-dev"
+        argocd:
+          serverName: "in-cluster"
+          destinationNamespace: "nubenetes-dev-apps"
+        namespaces:
+          ci: "jenkins"
+          gitops: "argocd"
+          observability: "observability"
+          workloads: "nubenetes-dev-apps"
+
+      - name: "ocp-staging"
+        environment: "staging"
+        role: "uat-workloads"
+        server: "https://api.ocp-staging.nubenetes.internal:6443"
+        ingressDomain: "apps.ocp-staging.nubenetes.internal"
+        registry:
+          internal: "image-registry.openshift-image-registry.svc:5000"
+          external: "default-route-openshift-image-registry.apps.ocp-staging.nubenetes.internal"
+          namespacePrefix: "nubenetes-staging"
+        argocd:
+          serverName: "ocp-staging-cluster"
+          destinationNamespace: "nubenetes-staging-apps"
+        namespaces:
+          workloads: "nubenetes-staging-apps"
+
+      - name: "ocp-prod"
+        environment: "prod"
+        role: "production-workloads"
+        server: "https://api.ocp-prod.nubenetes.internal:6443"
+        ingressDomain: "apps.ocp-prod.nubenetes.internal"
+        registry:
+          internal: "image-registry.openshift-image-registry.svc:5000"
+          external: "default-route-openshift-image-registry.apps.ocp-prod.nubenetes.internal"
+          namespacePrefix: "nubenetes-prod"
+        argocd:
+          serverName: "ocp-prod-cluster"
+          destinationNamespace: "nubenetes-prod-apps"
+        namespaces:
+          workloads: "nubenetes-prod-apps"

@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jhipster-microservice-prod
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: jhipster-microservice
+    environment: prod
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/nubenetes/jhipster-microservice.git'
+    targetRevision: main
+    path: k8s/overlays/prod
+  destination:
+    name: ocp-prod-cluster
+    namespace: nubenetes-prod-apps
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

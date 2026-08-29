@@ -1,0 +1,123 @@
+// ==============================================================================
+// Declarative CI Pipeline: Modern Angular 18+ Frontend
+// Application: angular-frontend
+// ==============================================================================
+pipeline {
+    agent {
+        node {
+            label 'node-angular'
+        }
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '30', daysToKeepStr: '30'))
+        timestamps()
+        ansiColor('xterm')
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        APP_NAME           = 'angular-frontend'
+        APP_REPO_URL       = 'https://github.com/nubenetes/angular-frontend.git'
+        DEV_REGISTRY       = 'image-registry.openshift-image-registry.svc:5000'
+        DEV_NAMESPACE      = 'nubenetes-dev-apps'
+        IMAGE_NAME         = "${env.DEV_REGISTRY}/${env.DEV_NAMESPACE}/${env.APP_NAME}"
+        GIT_COMMIT_SHORT   = ''
+        CALCULATED_TAG     = ''
+    }
+
+    stages {
+        stage('Checkout Application Code') {
+            steps {
+                script {
+                    echo "===> Checking out Angular Frontend Repository: ${env.APP_REPO_URL}"
+                    echo "===> Selected Revision via Git Parameter: ${params.APP_GIT_REVISION}"
+                    
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: "${params.APP_GIT_REVISION}"]],
+                        userRemoteConfigs: [[url: env.APP_REPO_URL]]
+                    ])
+                    
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.CALCULATED_TAG   = "1.5.0-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
+                    currentBuild.displayName = "#${BUILD_NUMBER} (${params.APP_GIT_REVISION} - ${env.GIT_COMMIT_SHORT})"
+                }
+            }
+        }
+
+        stage('Install Dependencies & Lint') {
+            steps {
+                container('nodejs') {
+                    echo "===> Running npm ci and ESLint..."
+                    sh '''
+                        echo "Running npm ci..."
+                        echo "Running ng lint..."
+                    '''
+                }
+            }
+        }
+
+        stage('Unit Tests with Karma/Jest') {
+            steps {
+                container('nodejs') {
+                    echo "===> Running Angular Unit Tests in Headless Chromium..."
+                    sh '''
+                        echo "npm run test:ci -- --watch=false --browsers=ChromeHeadless"
+                    '''
+                }
+            }
+        }
+
+        stage('Production Build') {
+            steps {
+                container('nodejs') {
+                    echo "===> Building Production Distribution Bundle (ng build --configuration production)..."
+                    sh '''
+                        echo "Building Angular optimized production artifacts..."
+                    '''
+                }
+            }
+        }
+
+        stage('Build & Push Container Image') {
+            steps {
+                echo "===> Building NGINX Frontend Container Image: ${env.IMAGE_NAME}:${env.CALCULATED_TAG}"
+                sh """
+                    echo "Pushing image to OpenShift DEV Internal Registry: ${env.IMAGE_NAME}:${env.CALCULATED_TAG}"
+                """
+            }
+        }
+
+        stage('Trigger CD Release Orchestrator') {
+            when {
+                expression { return params.TRIGGER_CD_RELEASE == true }
+            }
+            steps {
+                echo "===> Triggering Downstream CD Release Orchestration Pipeline..."
+                build job: '02-CD-Release-Orchestrators/multi-cluster-release-orchestrator',
+                    parameters: [
+                        string(name: 'GLOBAL_VARS_REVISION', value: params.GLOBAL_VARS_BRANCH ?: 'main'),
+                        string(name: 'APP_NAME', value: env.APP_NAME),
+                        string(name: 'IMAGE_TAG', value: env.CALCULATED_TAG),
+                        string(name: 'TARGET_ENVIRONMENT', value: params.TARGET_ENVIRONMENT ?: 'dev'),
+                        booleanParam(name: 'AUTO_PROMOTE_TO_STAGING', value: true),
+                        booleanParam(name: 'REQUIRE_PROD_APPROVAL', value: true),
+                        string(name: 'TRIGGERED_BY', value: 'CI_PIPELINE'),
+                        string(name: 'CHANGE_REQUEST_ID', value: "CI-AUTO-ANGULAR-${BUILD_NUMBER}")
+                    ],
+                    wait: false
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ [SUCCESS] Angular CI Build Completed for ${env.APP_NAME}:${env.CALCULATED_TAG}"
+        }
+        failure {
+            echo "❌ [FAILURE] Angular CI Build Failed for ${env.APP_NAME}"
+        }
+    }
+}

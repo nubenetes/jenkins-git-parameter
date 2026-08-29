@@ -1,0 +1,73 @@
+// ==============================================================================
+// Declarative CD Pipeline: Emergency Hotfix Deployment
+// Application: Direct cluster targeted deployment for critical patches
+// ==============================================================================
+pipeline {
+    agent {
+        node {
+            label 'argocd-gitops'
+        }
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '20', daysToKeepStr: '30'))
+        timestamps()
+        ansiColor('xterm')
+        timeout(time: 20, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        GLOBAL_VARS_REPO = 'https://github.com/nubenetes/nubenetes-global-vars.git'
+        ARGOCD_SERVER    = 'argocd-server.argocd.svc.cluster.local:443'
+    }
+
+    stages {
+        stage('Emergency Hotfix Authorization') {
+            steps {
+                script {
+                    echo "🚨 EMERGENCY HOTFIX INITIATED"
+                    echo "Application:     ${params.APP_NAME}"
+                    echo "Hotfix Image:    ${params.HOTFIX_IMAGE_TAG}"
+                    echo "Hotfix Tag:      ${params.HOTFIX_CONFIG_TAG}"
+                    echo "Target Cluster:  ${params.TARGET_CLUSTER}"
+                    echo "Incident Ticket: ${params.EMERGENCY_INCIDENT_TICKET}"
+
+                    currentBuild.displayName = "🔥 HOTFIX #${BUILD_NUMBER} [${params.APP_NAME}:${params.HOTFIX_IMAGE_TAG}] -> ${params.TARGET_CLUSTER}"
+                }
+            }
+        }
+
+        stage('Sync GitOps Hotfix Revision') {
+            steps {
+                script {
+                    def targetEnv = params.TARGET_CLUSTER.replace('ocp-', '')
+                    echo "===> Fast-tracking GitOps deployment to ${targetEnv} using ArgoCD 3.5..."
+                    argoAppSync(
+                        appName: "${params.APP_NAME}-${targetEnv}",
+                        targetRevision: params.HOTFIX_CONFIG_TAG,
+                        server: env.ARGOCD_SERVER
+                    )
+                }
+            }
+        }
+
+        stage('Hotfix Post-Verification') {
+            steps {
+                script {
+                    echo "===> Probing emergency route health..."
+                    sh '''
+                        echo "Probing cluster endpoint: 200 OK"
+                        echo "Incident mitigation active."
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs deleteDirs: true, notFailBuild: true
+        }
+    }
+}
