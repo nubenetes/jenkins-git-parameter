@@ -19,7 +19,7 @@ def apps = [
         repoUrl: 'https://github.com/nubenetes/angular-frontend.git',
         defaultBranch: 'main',
         jenkinsfile: 'jenkinsfiles/ci/Jenkinsfile.app-angular',
-        dualDropdownJenkinsfile: 'jenkinsfiles/ci/Jenkinsfile.app-angular',
+        dualDropdownJenkinsfile: 'jenkinsfiles/ci/Jenkinsfile.app-angular-dual-dropdown',
         description: 'Modern Angular 18+ Single Page App'
     ]
 ]

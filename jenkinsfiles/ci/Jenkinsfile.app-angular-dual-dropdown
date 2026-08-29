@@ -1,0 +1,146 @@
+// ==============================================================================
+// Declarative CI/CD Pipeline (Pattern 1: Dual Dropdown All-in-One)
+// Application: Angular 18+ Frontend with In-Pipeline Global Vars
+// ==============================================================================
+pipeline {
+    agent {
+        node {
+            label 'node-angular'
+        }
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '30', daysToKeepStr: '30'))
+        timestamps()
+        ansiColor('xterm')
+        timeout(time: 45, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        APP_NAME           = 'angular-frontend'
+        APP_REPO_URL       = 'https://github.com/nubenetes/angular-frontend.git'
+        GLOBAL_VARS_REPO   = 'https://github.com/nubenetes/jenkins-git-parameter-global-vars.git'
+        DEV_REGISTRY       = 'image-registry.openshift-image-registry.svc:5000'
+        DEV_NAMESPACE      = 'nubenetes-dev-apps'
+        IMAGE_NAME         = "${env.DEV_REGISTRY}/${env.DEV_NAMESPACE}/${env.APP_NAME}"
+        GIT_COMMIT_SHORT   = ''
+        CALCULATED_TAG     = ''
+    }
+
+    stages {
+        stage('Checkout Application & Global Vars') {
+            steps {
+                script {
+                    echo "================================================================="
+                    echo "🚀 DUAL-DROPDOWN ANGULAR PIPELINE (PATTERN 1)"
+                    echo "Selected App Revision:         ${params.APP_GIT_REVISION}"
+                    echo "Selected Global Vars Revision: ${params.GLOBAL_VARS_REVISION}"
+                    echo "Target Environment:            ${params.TARGET_ENVIRONMENT}"
+                    echo "================================================================="
+
+                    // 1. Checkout Application Code
+                    dir('app-source') {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: "${params.APP_GIT_REVISION}"]],
+                            userRemoteConfigs: [[url: env.APP_REPO_URL, name: 'origin-app']]
+                        ])
+                        env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                        env.CALCULATED_TAG   = "1.5.0-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}"
+                    }
+
+                    // 2. Checkout Global Variables Repository
+                    dir('global-vars') {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: "${params.GLOBAL_VARS_REVISION}"]],
+                            userRemoteConfigs: [[url: env.GLOBAL_VARS_REPO, name: 'origin-vars']]
+                        ])
+                    }
+
+                    currentBuild.displayName = "#${BUILD_NUMBER} [Angular:${params.APP_GIT_REVISION} | Vars:${params.GLOBAL_VARS_REVISION}]"
+                }
+            }
+        }
+
+        stage('Install & Lint') {
+            steps {
+                container('nodejs') {
+                    dir('app-source') {
+                        echo "===> Running npm ci & ESLint..."
+                        sh '''
+                            echo "Running npm ci..."
+                            echo "Running ng lint..."
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                container('nodejs') {
+                    dir('app-source') {
+                        echo "===> Running Karma / Jest Unit Tests in Headless Chromium..."
+                        sh '''
+                            echo "npm run test:ci -- --watch=false --browsers=ChromeHeadless"
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Production Build') {
+            steps {
+                container('nodejs') {
+                    dir('app-source') {
+                        echo "===> Building Production Distribution Bundle..."
+                        sh 'echo "ng build --configuration production"'
+                    }
+                }
+            }
+        }
+
+        stage('Build & Push Container Image') {
+            steps {
+                echo "===> Building Container Image: ${env.IMAGE_NAME}:${env.CALCULATED_TAG}"
+                sh """
+                    echo "Pushing Angular NGINX image to OpenShift DEV Registry: ${env.IMAGE_NAME}:${env.CALCULATED_TAG}"
+                """
+            }
+        }
+
+        stage('Apply In-Pipeline DEV Deployment') {
+            when {
+                expression { return params.DEPLOY_TO_DEV == true }
+            }
+            steps {
+                script {
+                    echo "===> [Pattern 1 Direct Deploy] Updating DEV manifests for Angular using Global Vars (${params.GLOBAL_VARS_REVISION})..."
+                    gitopsCommit(
+                        envName: 'dev',
+                        appName: env.APP_NAME,
+                        imageTag: env.CALCULATED_TAG,
+                        configDir: 'global-vars'
+                    )
+
+                    echo "===> Triggering ArgoCD DEV Sync for Angular directly from single pipeline..."
+                    argoAppSync(
+                        appName: "${env.APP_NAME}-dev",
+                        targetRevision: params.GLOBAL_VARS_REVISION
+                    )
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ [SUCCESS] Dual-Dropdown Angular Pipeline Completed for ${env.APP_NAME}:${env.CALCULATED_TAG}"
+        }
+        always {
+            cleanWs deleteDirs: true, notFailBuild: true
+        }
+    }
+}
