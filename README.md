@@ -99,6 +99,10 @@ This repository provides an enterprise-grade, end-to-end **Infrastructure as Cod
 
 The solution addresses a core enterprise challenge: **how to build, govern, promote, and release multi-repository cloud-native microservices across 3 distinct OpenShift clusters (DEV, STAGING, PROD) while leveraging dynamic Git Parameter selection, Declarative Pipelines as Code, ArgoCD 3.5 GitOps synchronization, and unified OpenTelemetry observability.**
 
+<details>
+<summary>🗺️ <b>Click to expand: End-to-End Multi-Cluster Platform Topology Diagram</b></summary>
+<br/>
+
 ```mermaid
 flowchart TB
     subgraph DeveloperWorkspace["1. Developer & External Systems"]
@@ -172,6 +176,8 @@ flowchart TB
     Prom -.->|Metrics Scrape| Grafana
 ```
 
+</details>
+
 ---
 
 ## In-Depth Architectural Analysis & Design Decisions
@@ -183,6 +189,10 @@ flowchart TB
 In cloud-native architectures, applications separate source code (`app-repo`) from centralized environmental configuration, cluster definitions, and Helm values (`jenkins-git-parameter-global-vars`).
 
 When engineering teams attempt to introduce multiple `gitParameter` dropdowns into a single Jenkins Pipeline, they almost universally encounter a hard blocker where `GitSCM` appears to only support **one** repository, or secondary dropdowns fail with `No GIT repository configured in SCM configuration`.
+
+<details>
+<summary>⚠️ <b>Click to expand: Jenkins SCM Lifecycle & Pre-Execution Blindspot Diagram</b></summary>
+<br/>
 
 ```mermaid
 flowchart TB
@@ -209,6 +219,8 @@ flowchart TB
     Dropdown -.-> Gap
     Gap -.-> RunStage
 ```
+
+</details>
 
 ##### Root Cause Analysis: The Three Jenkins Architectural Constraints
 
@@ -536,6 +548,10 @@ stage('Promote to OCP PROD Cluster') {
 
 ##### 3. End-to-End Hand-off Sequence Diagram
 
+<details>
+<summary>🔄 <b>Click to expand: End-to-End CI/CD Hand-off Sequence Diagram</b></summary>
+<br/>
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -576,6 +592,8 @@ sequenceDiagram
     end
 ```
 
+</details>
+
 ---
 
 #### When to Use Each Pattern: Environment & Persona Decision Matrix
@@ -597,6 +615,10 @@ sequenceDiagram
 #### Coexistence Strategy: Combining Pattern 1 (Inner-Loop) & Pattern 2 (Outer-Loop) in Development
 
 Can Pattern 1 and Pattern 2 coexist? **Yes! Coexistence is the recommended industry standard** for separating **Inner-Loop** (rapid developer experimentation) from **Outer-Loop** (governed, automated CI/CD release lifecycle).
+
+<details>
+<summary>🧪 <b>Click to expand: Inner-Loop (Pattern 1) vs Outer-Loop (Pattern 2) Coexistence Diagram</b></summary>
+<br/>
 
 ```mermaid
 flowchart TD
@@ -622,6 +644,8 @@ flowchart TD
         CDJob -->|GitOps Promotion| SharedClusters
     end
 ```
+
+</details>
 
 ##### 1. Pattern 1 for Inner-Loop: Developer Sandboxes & Feature Branch Pairing
 - **Scenario**: An engineer is developing a feature requiring **simultaneous code and environment configuration changes** (e.g. a new microservice endpoint requiring a new database connection string or secret in `jenkins-git-parameter-global-vars`).
@@ -710,6 +734,10 @@ By leveraging the **W3C Distributed Tracing standard**, every CI build, containe
 
 #### End-to-End Multi-Layer Observability Architecture
 
+<details>
+<summary>📊 <b>Click to expand: Full-Stack Observability & Trace Correlation Architecture Diagram</b></summary>
+<br/>
+
 ```mermaid
 flowchart TB
     subgraph Layer1["1. CI/CD Platform & GitOps Engine"]
@@ -746,6 +774,8 @@ flowchart TB
     Prom -->|"Metrics with Exemplars"| Grafana
     Collector -->|"Correlated Traces"| Grafana
 ```
+
+</details>
 
 #### The 3 Pillars of Observability with Full Correlation
 
@@ -818,6 +848,10 @@ An enterprise-grade cloud-native platform maintains a strict separation between 
 
 #### Lifecycle & Integration Flow
 
+<details>
+<summary>🏛️ <b>Click to expand: Platform IaC vs Centralized Governance Integration Flow Diagram</b></summary>
+<br/>
+
 ```mermaid
 flowchart TB
     subgraph Day1["1. Platform Bootstrap & IaC (jenkins-git-parameter)"]
@@ -851,6 +885,8 @@ flowchart TB
     Day2 -.->|"Queried dynamically in UI"| UIForm
     Day2 -.->|"Checked out at runtime"| PipelineStage
 ```
+
+</details>
 
 #### Parameter Binding & Schema Mapping
 
@@ -1072,6 +1108,10 @@ dir('jenkins-git-parameter-global-vars') {
 
 In enterprise environments, production deployments and cross-cluster promotions are rarely triggered manually by individual developers clicking buttons in a CI tool. Instead, organizations enforce structured, auditable **IT Service Management (ITSM)** workflows using **Jira Service Management (JSM) Forms**, **Jira Assets / CMDB**, **ServiceNow**, or **Backstage Developer Portals**.
 
+<details>
+<summary>🎫 <b>Click to expand: Jira ITSM & Backstage IDP Self-Service Architecture Diagram</b></summary>
+<br/>
+
 ```mermaid
 flowchart TB
     subgraph SelfServicePortals["1. Governed Self-Service & Developer Portals"]
@@ -1121,6 +1161,8 @@ flowchart TB
     JenkinsCD -.->|Close Jira Ticket| JiraForm
     JenkinsCD -.->|Update Status in UI| BackstageUI
 ```
+
+</details>
 
 ---
 
@@ -1200,6 +1242,10 @@ To transition this platform into a mission-critical, regulated enterprise produc
 
 In multi-cluster promotion (`ocp-dev` $\rightarrow$ `ocp-staging` $\rightarrow$ `ocp-prod`), promoting raw container images without cryptographic signatures creates a software supply chain vulnerability.
 
+<details>
+<summary>🔏 <b>Click to expand: Cosign Image Signing & SLSA Level 3 Attestation Flow Diagram</b></summary>
+<br/>
+
 ```mermaid
 flowchart LR
     CI["🏗️ CI Build (Maven/Node)"]
@@ -1218,6 +1264,8 @@ flowchart LR
     ClusterPolicy -->|Signature Verified Valid| ProdEnv
 ```
 
+</details>
+
 #### Implemented Components:
 - **Shared Library Step**: [`shared-library/vars/cosignSign.groovy`](shared-library/vars/cosignSign.groovy) automatically signs the image digest, generates CycloneDX SBOMs via Syft, and attaches in-toto SLSA build provenance statements.
 - **OpenShift Signature Policy**: [`security/openshift-image-signature-policy.yaml`](security/openshift-image-signature-policy.yaml) configures OpenShift's native `ClusterImagePolicy` to strictly reject unsigned images in `nubenetes-prod-apps`.
@@ -1227,6 +1275,10 @@ flowchart LR
 ### 2. Zero-Trust Secret Management: External Secrets Operator (ESO) + HashiCorp Vault
 
 Plaintext database credentials, API tokens, and private keys should never be committed into Git repositories.
+
+<details>
+<summary>🔐 <b>Click to expand: External Secrets Operator & Vault Synchronization Flow Diagram</b></summary>
+<br/>
 
 ```mermaid
 flowchart LR
@@ -1242,6 +1294,8 @@ flowchart LR
     K8sSecret -->|Mounted as Env / Volume| Pod
 ```
 
+</details>
+
 #### Implemented Components:
 - **ClusterSecretStore**: [`security/external-secrets-operator/cluster-secret-store-vault.yaml`](security/external-secrets-operator/cluster-secret-store-vault.yaml) integrates OpenShift service accounts directly with Vault using Kubernetes Auth.
 - **Declarative ExternalSecrets**: [`jenkins-git-parameter-global-vars/secrets/`](https://github.com/nubenetes/jenkins-git-parameter-global-vars/tree/main/secrets) declares Vault secret mappings (`external-secrets-prod.yaml`) that synchronize secrets into in-memory Kubernetes Secrets with automatic rotation.
@@ -1251,6 +1305,10 @@ flowchart LR
 ### 3. Dynamic Ephemeral PR Preview Environments with ArgoCD ApplicationSet
 
 Supercharges **Pattern 1 (Inner-Loop)** by automatically provisioning isolated preview namespaces for active GitHub Pull Requests, and deleting them upon PR merge/close.
+
+<details>
+<summary>⚡ <b>Click to expand: Ephemeral PR Preview Environment Provisioning Flow Diagram</b></summary>
+<br/>
 
 ```mermaid
 flowchart LR
@@ -1268,6 +1326,8 @@ flowchart LR
     AppSet -.->|Automatically Prunes & Deletes| PreviewNS
 ```
 
+</details>
+
 #### Implemented Component:
 - **PR Generator Manifest**: [`argocd-apps/applicationset-pull-request-preview.yaml`](argocd-apps/applicationset-pull-request-preview.yaml) dynamically generates preview applications for PRs labeled `preview-environment`.
 
@@ -1276,6 +1336,10 @@ flowchart LR
 ### 4. Progressive Delivery with Argo Rollouts (Metric-Driven Canary)
 
 Replaces risky all-at-once rolling updates in STAGING and PROD with automated canary analysis that continuously measures Prometheus / OpenTelemetry telemetry.
+
+<details>
+<summary>🐣 <b>Click to expand: Argo Rollouts Canary Traffic Splitting & Metric Analysis Diagram</b></summary>
+<br/>
 
 ```mermaid
 flowchart LR
@@ -1291,6 +1355,8 @@ flowchart LR
     Prometheus -.->|Metric Evaluation| RolloutCtrl
     RolloutCtrl -->|Pass: Promote to 100%<br/>Fail: Automated Rollback| Ingress
 ```
+
+</details>
 
 #### Implemented Components:
 - **AnalysisTemplate**: [`sample-apps/jhipster-microservice/rollout/analysis-template-prometheus.yaml`](sample-apps/jhipster-microservice/rollout/analysis-template-prometheus.yaml) evaluates HTTP 5xx error rate ($\le 0.1\%$) and p99 latency ($\le 250\text{ms}$).

@@ -26,6 +26,10 @@
 
 This repository (**`jenkins-git-parameter-global-vars`**) serves as the **Single Source of Truth (SSOT)** for environment configurations, multi-cluster topology, Helm values, and version matrices consumed by the **[jenkins-git-parameter](https://github.com/nubenetes/jenkins-git-parameter)** platform on **Red Hat OpenShift 4.20+**.
 
+<details>
+<summary>🌐 <b>Click to expand: Global Configuration & GitOps Synchronization Architecture Diagram</b></summary>
+<br/>
+
 ```mermaid
 flowchart LR
     Jenkins["Jenkins Controller<br/>(Git Parameter Plugin)"]
@@ -38,6 +42,8 @@ flowchart LR
     CD -->|Updates Image Tags & Injects Vars| Argo
     Argo -->|Syncs Manifests| OCP_Clusters["OpenShift Clusters<br/>(DEV / STAGING / PROD)"]
 ```
+
+</details>
 
 ---
 
