@@ -703,38 +703,35 @@ flowchart TB
         direction TB
         Jenkins["⚙️ Jenkins Controller<br/>(OpenTelemetry Plugin)"]
         Agents["☸️ Ephemeral Agent Pods<br/>(Maven / Skopeo / Cosign)"]
-        ArgoCD["🐙 ArgoCD 3.5 Controller<br/>(ApplicationSet / Prometheus)"]
-        
-        Jenkins -->|OTLP Traces & Metrics| Collector
-        Agents -->|Span Context (TRACEPARENT)| Collector
-        ArgoCD -->|Sync & Health Metrics| Prom
+        ArgoCD["🐙 ArgoCD 3.5 Controller<br/>(ApplicationSet Engine)"]
     end
 
     subgraph Layer2["2. Observability & Telemetry Processing"]
         direction TB
-        Collector["🔭 OpenTelemetry Collector Contrib<br/>(OTLP gRPC:4317 / HTTP:4318)"]
-        Prom["🔥 Prometheus Server<br/>(Scrape & Metric Storage)"]
-        
-        Collector -->|Metrics Namespace: jenkins_otel| Prom
+        Collector["🔭 OpenTelemetry Collector<br/>(OTLP gRPC:4317 / HTTP:4318)"]
+        Prom["🔥 Prometheus Server<br/>(Metrics Scrape & Storage)"]
     end
 
     subgraph Layer3["3. Deployed Microservices & Web Apps"]
         direction TB
+        Angular["🅰️ Angular 18 Web App<br/>(@opentelemetry/sdk-trace-web)"]
         SpringBoot["☕ Spring Boot 3 Microservice<br/>(Micrometer Tracing + OTLP)"]
-        Angular["🅰️ Angular 18 Single Page App<br/>(@opentelemetry/sdk-trace-web)"]
-        
-        Angular -->|HTTP Call + W3C Trace Header| SpringBoot
-        SpringBoot -->|OTLP Traces & Exemplars| Collector
-        SpringBoot -->|/actuator/prometheus| Prom
     end
 
-    subgraph Layer4["4. Unified Grafana 11+ Visualization & Correlation"]
+    subgraph Layer4["4. Unified Grafana 11+ Correlation"]
         direction TB
-        Grafana["📊 Grafana Unified Observability<br/>(Dashboards + Trace-to-Log + Exemplars)"]
-        
-        Prom -->|Exemplars & Timeseries| Grafana
-        Collector -->|Correlated Traces| Grafana
+        Grafana["📊 Grafana Unified Dashboards<br/>(Trace-to-Log & Exemplars)"]
     end
+
+    Jenkins -->|"OTLP Traces"| Collector
+    Agents -->|"Span Context (W3C)"| Collector
+    ArgoCD -->|"Prometheus Metrics"| Prom
+    Collector -->|"Export Metrics"| Prom
+    Angular -->|"HTTP + W3C Traceparent"| SpringBoot
+    SpringBoot -->|"OTLP Traces & Exemplars"| Collector
+    SpringBoot -->|"/actuator/prometheus"| Prom
+    Prom -->|"Metrics with Exemplars"| Grafana
+    Collector -->|"Correlated Traces"| Grafana
 ```
 
 #### The 3 Pillars of Observability with Full Correlation
