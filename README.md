@@ -30,6 +30,13 @@
 
 </div>
 
+> [!IMPORTANT]
+> ### 🔗 Centralized Architecture & Linked Repositories
+> This platform operates in a tightly integrated multi-repository GitOps ecosystem:
+> * 🌐 **Centralized Governance & Configuration SSOT**: [**`nubenetes/jenkins-git-parameter-global-vars`**](https://github.com/nubenetes/jenkins-git-parameter-global-vars) — Master repository containing cluster topologies, environment overlays, application inventory, and dynamic `gitParameter` dropdown targets.
+> * 🚀 **CI/CD Platform Orchestrator (This Repository)**: [**`nubenetes/jenkins-git-parameter`**](https://github.com/nubenetes/jenkins-git-parameter) — Infrastructure-as-Code, JCasC, Job DSL, Jenkinsfiles, OpenTelemetry, Grafana 13.2.0, and ArgoCD 3.5 manifests.
+> * ☕ **Workload Reference Microservice**: [**`nubenetes/jhipster-microservice`**](https://github.com/nubenetes/jhipster-microservice) — Java 21 / Spring Boot 3 cloud-native microservice with OpenTelemetry and Prometheus integration.
+
 ---
 
 ## 📑 Table of Contents
@@ -57,6 +64,10 @@
     - [1. W3C Trace Context Propagation (Pipeline -> GitOps -> Live App)](#1-w3c-trace-context-propagation-pipeline---gitops---live-app)
     - [2. Prometheus Exemplars & Traces-to-Logs Correlation in Grafana 13.2.0](#2-prometheus-exemplars--traces-to-logs-correlation-in-grafana-1320)
     - [3. Pre-configured Enterprise Grafana Dashboards](#3-pre-configured-enterprise-grafana-dashboards)
+  - [6. Centralized Configuration Architecture: config/environments.env vs jenkins-git-parameter-global-vars](#6-centralized-configuration-architecture-configenvironmentsenv-vs-jenkins-git-parameter-global-vars)
+    - [Lifecycle & Integration Flow](#lifecycle--integration-flow)
+    - [Parameter Binding & Schema Mapping](#parameter-binding--schema-mapping)
+    - [Why Separation of Concerns Protects Production](#why-separation-of-concerns-protects-production)
 - [Repository Structure](#repository-structure)
 - [Quick Start: 1-Click Automated Deployment](#quick-start-1-click-automated-deployment)
   - [Prerequisites](#prerequisites)
@@ -798,6 +809,65 @@ The repository ships with **3 production-grade, pre-provisioned Grafana Dashboar
 | **`jenkins-performance-otel`** | **Jenkins Platform & Ephemeral Agent APM** | Stage durations, p95 queue latency, success/failure rate, dynamic Kubernetes agent pod concurrency, OTel trace spans. |
 | **`argocd-gitops-sync`** | **ArgoCD 3.5 Multi-Cluster GitOps Sync** | Application health status (`Healthy`/`Degraded`), sync phases (`Synced`/`OutOfSync`), sync waves progression, drift detection. |
 | **`workload-apm-correlation`** | **Workload APM & CI/CD GitOps Correlation** | Request throughput (req/sec), p50/p90/p95/p99 latency percentiles with OTel Exemplars, HTTP 5xx error budget, JVM heap & GC pause metrics, correlated CI/CD deployment annotations. |
+
+---
+
+### 6. Centralized Configuration Architecture: `config/environments.env` vs `jenkins-git-parameter-global-vars`
+
+An enterprise-grade cloud-native platform maintains a strict separation between **Platform Bootstrap (Day-1 IaC)** and **Dynamic Workload / Cluster Inventory Governance (Day-2 GitOps SSOT)**.
+
+#### Lifecycle & Integration Flow
+
+```mermaid
+flowchart TB
+    subgraph Day1["1. Platform Bootstrap & IaC (jenkins-git-parameter)"]
+        direction TB
+        EnvFile["📄 config/environments.env<br/>• GLOBAL_VARS_REPO_URL<br/>• OCP_CLUSTER_DEV/STG/PRD<br/>• OCP_APPS_DOMAIN"]
+        DeployScript["⚙️ deploy.sh / Makefile"]
+        JCasC["📦 JCasC (jenkins-jcasc.yaml)<br/>• Injects env.GLOBAL_VARS_REPO"]
+
+        EnvFile --> DeployScript
+        DeployScript --> JCasC
+    end
+
+    subgraph Day2["2. Centralized Governance SSOT (jenkins-git-parameter-global-vars)"]
+        direction TB
+        ClustersDir["📁 clusters/<br/>• ocp-dev-cluster.yaml<br/>• ocp-staging-cluster.yaml<br/>• ocp-prod-cluster.yaml"]
+        EnvsDir["📁 environments/<br/>• dev.yaml<br/>• staging.yaml<br/>• prod.yaml"]
+        AppInventory["📁 apps/<br/>• applications-inventory.yaml"]
+    end
+
+    subgraph Runtime["3. Jenkins CI/CD & ArgoCD Runtime Execution"]
+        direction TB
+        JobDSL["📜 Job DSL (pipelines-cd.groovy)<br/>• gitParameter queries GLOBAL_VARS_REPO"]
+        UIForm["📋 UI Dropdown: GLOBAL_VARS_REVISION<br/>• Real-time git ls-remote resolution"]
+        PipelineStage["🚀 Jenkinsfile.release-orchestrator<br/>• Dynamic checkout of selected branch/tag<br/>• Parses cluster YAMLs & triggers ArgoCD"]
+
+        JCasC --> JobDSL
+        JobDSL --> UIForm
+        UIForm --> PipelineStage
+    end
+
+    Day2 -.->|"Queried dynamically in UI"| UIForm
+    Day2 -.->|"Checked out at runtime"| PipelineStage
+```
+
+#### Parameter Binding & Schema Mapping
+
+| Dimension | `config/environments.env` (Platform IaC) | `jenkins-git-parameter-global-vars` (Workload SSOT) |
+| :--- | :--- | :--- |
+| **Primary Role** | Day-0 / Day-1 Platform deployment, Helm version pinning, namespace provisioning. | Day-2 Workload governance, cluster inventory, environment parameter overlays. |
+| **Consuming Actors** | Platform Engineers, Bash scripts (`deploy.sh`, `destroy.sh`), `Makefile`. | Developers, Release Managers, Jenkins `gitParameter` UI, CD Orchestrators. |
+| **Modification Frequency** | Infrequent (Cluster upgrades, Helm chart updates, new platform tools). | High (Daily feature branches, environment config tweaks, new microservices). |
+| **Failure Blast Radius** | High (Platform-wide provisioning disruption if misconfigured). | Isolated (Targeted to a specific application or promotional environment). |
+| **Git Branching Policy** | Trunk-based (`main`), changes deployed via infrastructure maintenance windows. | Multi-branch & Semantic Tags (`main`, `feature/*`, `env/staging-override`, `v*.*.*-release`). |
+
+#### Why Separation of Concerns Protects Production
+
+1. **Zero-Downtime Governance Changes**:
+   Adding a new cluster target (`clusters/ocp-dr-cluster.yaml`), updating microservice memory limits (`environments/prod.yaml`), or adding a new application to `apps/applications-inventory.yaml` requires **zero changes and zero restarts** on Jenkins, ArgoCD, or JCasC.
+2. **Immutable Platform, Mutable Workloads**:
+   The Jenkins controller and JCasC configuration remain static and secure. Operators interact with [**`jenkins-git-parameter-global-vars`**](https://github.com/nubenetes/jenkins-git-parameter-global-vars) via standard Pull Requests, enabling review gates, branch protections, and compliance audits before a configuration is released.
 
 ---
 
