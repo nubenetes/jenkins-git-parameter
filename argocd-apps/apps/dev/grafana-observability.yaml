@@ -1,0 +1,65 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana-observability-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/version: "13.2.0"
+    environment: dev
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: 'https://grafana.github.io/helm-charts'
+    chart: grafana
+    targetRevision: 8.10.1
+    helm:
+      releaseName: grafana
+      values: |
+        image:
+          repository: grafana/grafana
+          tag: "13.2.0"
+          pullPolicy: IfNotPresent
+        adminPassword: "${GRAFANA_ADMIN_PASSWORD:-admin123!}"
+        datasources:
+          datasources.yaml:
+            apiVersion: 1
+            datasources:
+              - name: Prometheus
+                type: prometheus
+                url: http://prometheus-server.observability.svc.cluster.local
+                access: proxy
+                isDefault: true
+                jsonData:
+                  exemplarTraceIdDestinations:
+                    - name: trace_id
+                      datasourceUid: OpenTelemetry-Traces
+                      urlDisplayLabel: "View OpenTelemetry Trace (Tempo/Jaeger)"
+              - name: OpenTelemetry-Traces
+                type: jaeger
+                uid: OpenTelemetry-Traces
+                url: http://otel-collector.observability.svc.cluster.local:16686
+                access: proxy
+        dashboardProviders:
+          dashboardproviders.yaml:
+            apiVersion: 1
+            providers:
+              - name: 'jenkins-dashboards'
+                orgId: 1
+                folder: 'Jenkins & GitOps CI/CD'
+                type: file
+                disableDeletion: false
+                editable: true
+                options:
+                  path: /var/lib/grafana/dashboards/custom
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

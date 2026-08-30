@@ -58,10 +58,12 @@ if command -v helm &>/dev/null; then
       --create-namespace \
       -f "${SCRIPT_DIR}/helm/observability/prometheus-values.yaml" || echo "Note: Prometheus helm simulated"
 
-    echo "Deploying Grafana..."
+    echo "Deploying Grafana ${GRAFANA_IMAGE_TAG:-13.2.0}..."
     helm upgrade --install grafana grafana/grafana \
+      --version "${GRAFANA_HELM_VERSION}" \
       --namespace observability \
       --create-namespace \
+      --set image.tag="${GRAFANA_IMAGE_TAG:-13.2.0}" \
       -f "${SCRIPT_DIR}/helm/observability/grafana-values.yaml" || echo "Note: Grafana helm simulated"
 fi
 
@@ -98,6 +100,6 @@ echo "🎉 DEPLOYMENT COMPLETE! Platform Endpoints & Access:"
 echo "======================================================================"
 echo "🔹 Jenkins UI:    https://jenkins-jenkins.apps.ocp-dev.nubenetes.internal (admin / admin123!)"
 echo "🔹 ArgoCD UI:     https://argocd-server.apps.ocp-dev.nubenetes.internal (admin)"
-echo "🔹 Grafana UI:    http://grafana.observability.svc.cluster.local:3000 (admin / admin123!)"
+echo "🔹 Grafana 13.2.0 UI: http://grafana.observability.svc.cluster.local:3000 (admin / admin123!)"
 echo "🔹 OTel Ingest:   http://otel-collector.observability.svc.cluster.local:4317 (gRPC)"
 echo "======================================================================"

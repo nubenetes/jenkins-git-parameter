@@ -3,6 +3,11 @@
 # ==============================================================================
 adminPassword: "${GRAFANA_ADMIN_PASSWORD:-admin123!}"
 
+image:
+  repository: grafana/grafana
+  tag: "13.2.0"
+  pullPolicy: IfNotPresent
+
 datasources:
   datasources.yaml:
     apiVersion: 1

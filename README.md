@@ -17,7 +17,7 @@
 [![Git Parameter](https://img.shields.io/badge/Jenkins-Git_Parameter-success.svg?style=flat-square&logo=git)](https://plugins.jenkins.io/git-parameter/)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-OTLP_Tracing-F5A800.svg?style=flat-square&logo=opentelemetry&logoColor=white)](https://opentelemetry.io/)
 [![Prometheus](https://img.shields.io/badge/Metrics-Prometheus-E6522C.svg?style=flat-square&logo=prometheus&logoColor=white)](https://prometheus.io/)
-[![Grafana](https://img.shields.io/badge/Dashboards-Grafana-F46800.svg?style=flat-square&logo=grafana&logoColor=white)](https://grafana.com/)
+[![Grafana](https://img.shields.io/badge/Dashboards-Grafana_13.2.0-F46800.svg?style=flat-square&logo=grafana&logoColor=white)](https://grafana.com/)
 [![Java 21](https://img.shields.io/badge/Java-21_LTS-007396.svg?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
 [![Spring Boot 3](https://img.shields.io/badge/Spring_Boot-3.3.4-6DB33F.svg?style=flat-square&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![Angular 18](https://img.shields.io/badge/Angular-18%2B-DD0031.svg?style=flat-square&logo=angular&logoColor=white)](https://angular.dev/)
@@ -51,11 +51,11 @@
   - [2. Job DSL + Declarative Pipelines vs. Monolithic Shared Libraries](#2-job-dsl--declarative-pipelines-vs-monolithic-shared-libraries)
   - [3. OpenShift 4.20+ Security & Ephemeral Kubernetes Agents](#3-openshift-420-security--ephemeral-kubernetes-agents)
   - [4. ArgoCD 3.5 Integration & Multi-Cluster Promotion](#4-argocd-35-integration--multi-cluster-promotion)
-  - [5. Full-Stack Observability: OpenTelemetry, Prometheus & Grafana (Platform & App Correlation)](#5-full-stack-observability-opentelemetry-prometheus--grafana-platform--app-correlation)
+  - [5. Full-Stack Observability: OpenTelemetry, Prometheus & Grafana 13.2.0 (ArgoCD GitOps Managed)](#5-full-stack-observability-opentelemetry-prometheus--grafana-1320-argocd-gitops-managed)
     - [End-to-End Multi-Layer Observability Architecture](#end-to-end-multi-layer-observability-architecture)
     - [The 3 Pillars of Observability with Full Correlation](#the-3-pillars-of-observability-with-full-correlation)
     - [1. W3C Trace Context Propagation (Pipeline -> GitOps -> Live App)](#1-w3c-trace-context-propagation-pipeline---gitops---live-app)
-    - [2. Prometheus Exemplars & Traces-to-Logs Correlation in Grafana](#2-prometheus-exemplars--traces-to-logs-correlation-in-grafana)
+    - [2. Prometheus Exemplars & Traces-to-Logs Correlation in Grafana 13.2.0](#2-prometheus-exemplars--traces-to-logs-correlation-in-grafana-1320)
     - [3. Pre-configured Enterprise Grafana Dashboards](#3-pre-configured-enterprise-grafana-dashboards)
 - [Repository Structure](#repository-structure)
 - [Quick Start: 1-Click Automated Deployment](#quick-start-1-click-automated-deployment)
@@ -689,9 +689,11 @@ flowchart TD
 
 ---
 
-### 5. Full-Stack Observability: OpenTelemetry, Prometheus & Grafana (Platform & App Correlation)
+### 5. Full-Stack Observability: OpenTelemetry, Prometheus & Grafana 13.2.0 (ArgoCD GitOps Managed)
 
 This platform implements a unified, end-to-end observability mesh covering both **Platform Operations** (Jenkins Controller, Ephemeral Agent Pods, ArgoCD GitOps Engine, OpenShift Cluster Metrics) and **Application Workloads** (Java 21 / Spring Boot Microservices, Angular SPAs).
+
+Grafana **13.2.0** is deployed and continuously reconciled via **ArgoCD GitOps** ([`argocd-apps/apps/dev/grafana-observability.yaml`](argocd-apps/apps/dev/grafana-observability.yaml)), with pinned image tags and automated drift management.
 
 By leveraging the **W3C Distributed Tracing standard**, every CI build, container promotion, GitOps sync, and live HTTP user request is linked through a single correlated `traceparent`.
 
@@ -718,9 +720,9 @@ flowchart TB
         SpringBoot["☕ Spring Boot 3 Microservice<br/>(Micrometer Tracing + OTLP)"]
     end
 
-    subgraph Layer4["4. Unified Grafana 11+ Correlation"]
+    subgraph Layer4["4. Unified Grafana 13.2.0 Correlation"]
         direction TB
-        Grafana["📊 Grafana Unified Dashboards<br/>(Trace-to-Log & Exemplars)"]
+        Grafana["📊 Grafana 13.2.0 Dashboards<br/>(Trace-to-Log & Exemplars)"]
     end
 
     Jenkins -->|"OTLP Traces"| Collector
@@ -779,11 +781,11 @@ The platform maintains unbroken distributed trace continuity using standard **W3
 
 ---
 
-#### 2. Prometheus Exemplars & Traces-to-Logs Correlation in Grafana
+#### 2. Prometheus Exemplars & Traces-to-Logs Correlation in Grafana 13.2.0
 
-Grafana 11+ is pre-configured with **Prometheus Exemplars** enabled in [`helm/observability/grafana-values.yaml`](helm/observability/grafana-values.yaml):
+Grafana **13.2.0** is pre-configured with **Prometheus Exemplars** enabled in [`helm/observability/grafana-values.yaml`](helm/observability/grafana-values.yaml):
 * When Prometheus collects `http_server_requests_seconds_bucket` latency metrics, Micrometer attaches the active `trace_id` as an exemplar.
-* In Grafana, hovering over a latency spike displays a blue exemplar dot; clicking it opens the exact OpenTelemetry trace span in the side-by-side Trace View.
+* In Grafana 13.2.0, hovering over a latency spike displays a blue exemplar dot; clicking it opens the exact OpenTelemetry trace span in the side-by-side Trace View.
 
 ---
 
@@ -861,6 +863,7 @@ jenkins-git-parameter/
 │   ├── applicationset-pull-request-preview.yaml # Dynamic ephemeral PR preview generator
 │   └── apps/
 │       ├── dev/jhipster-microservice.yaml
+│       ├── dev/grafana-observability.yaml       # ArgoCD GitOps Application for Grafana 13.2.0
 │       ├── staging/jhipster-microservice.yaml
 │       └── prod/jhipster-microservice.yaml
 ├── sample-apps/
@@ -924,7 +927,7 @@ After deployment completes, the script outputs the operational routes:
 | :--- | :--- | :--- |
 | **Jenkins Master** | `https://jenkins-jenkins.apps.ocp-dev.nubenetes.internal` | `admin` / `admin123!` |
 | **ArgoCD 3.5 UI** | `https://argocd-server.apps.ocp-dev.nubenetes.internal` | `admin` / *(retrieved via secret)* |
-| **Grafana Dashboards**| `http://grafana.observability.svc.cluster.local:3000` | `admin` / `admin123!` |
+| **Grafana 13.2.0 Dashboards**| `http://grafana.observability.svc.cluster.local:3000` | `admin` / `admin123!` |
 | **OTel Collector** | `http://otel-collector.observability.svc.cluster.local:4317` | *OTLP gRPC endpoint* |
 
 ### 3. Triggering Pipelines & `GLOBAL_VARS_REVISION` Selection
