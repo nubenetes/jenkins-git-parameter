@@ -51,7 +51,12 @@
   - [2. Job DSL + Declarative Pipelines vs. Monolithic Shared Libraries](#2-job-dsl--declarative-pipelines-vs-monolithic-shared-libraries)
   - [3. OpenShift 4.20+ Security & Ephemeral Kubernetes Agents](#3-openshift-420-security--ephemeral-kubernetes-agents)
   - [4. ArgoCD 3.5 Integration & Multi-Cluster Promotion](#4-argocd-35-integration--multi-cluster-promotion)
-  - [5. Full-Stack Observability: OpenTelemetry, Prometheus & Grafana](#5-full-stack-observability-opentelemetry-prometheus--grafana)
+  - [5. Full-Stack Observability: OpenTelemetry, Prometheus & Grafana (Platform & App Correlation)](#5-full-stack-observability-opentelemetry-prometheus--grafana-platform--app-correlation)
+    - [End-to-End Multi-Layer Observability Architecture](#end-to-end-multi-layer-observability-architecture)
+    - [The 3 Pillars of Observability with Full Correlation](#the-3-pillars-of-observability-with-full-correlation)
+    - [1. W3C Trace Context Propagation (Pipeline -> GitOps -> Live App)](#1-w3c-trace-context-propagation-pipeline---gitops---live-app)
+    - [2. Prometheus Exemplars & Traces-to-Logs Correlation in Grafana](#2-prometheus-exemplars--traces-to-logs-correlation-in-grafana)
+    - [3. Pre-configured Enterprise Grafana Dashboards](#3-pre-configured-enterprise-grafana-dashboards)
 - [Repository Structure](#repository-structure)
 - [Quick Start: 1-Click Automated Deployment](#quick-start-1-click-automated-deployment)
   - [Prerequisites](#prerequisites)
@@ -684,30 +689,116 @@ flowchart TD
 
 ---
 
-### 5. Full-Stack Observability: OpenTelemetry, Prometheus & Grafana
+### 5. Full-Stack Observability: OpenTelemetry, Prometheus & Grafana (Platform & App Correlation)
+
+This platform implements a unified, end-to-end observability mesh covering both **Platform Operations** (Jenkins Controller, Ephemeral Agent Pods, ArgoCD GitOps Engine, OpenShift Cluster Metrics) and **Application Workloads** (Java 21 / Spring Boot Microservices, Angular SPAs).
+
+By leveraging the **W3C Distributed Tracing standard**, every CI build, container promotion, GitOps sync, and live HTTP user request is linked through a single correlated `traceparent`.
+
+#### End-to-End Multi-Layer Observability Architecture
 
 ```mermaid
-flowchart LR
-    Jenkins["Jenkins Controller<br>(OpenTelemetry Plugin)"]
-    Agents["Ephemeral Agent Pods<br>(Maven / Skopeo / ArgoCD)"]
-    OTel["OpenTelemetry Collector<br>(OTLP gRPC:4317)"]
-    Prom["Prometheus Server<br>(/prometheus endpoint)"]
-    Grafana["Grafana Dashboards<br>(Correlated Views)"]
-    Argo["ArgoCD 3.5<br>(/metrics endpoint)"]
+flowchart TB
+    subgraph Layer1["1. CI/CD Platform & GitOps Engine"]
+        direction TB
+        Jenkins["⚙️ Jenkins Controller<br/>(OpenTelemetry Plugin)"]
+        Agents["☸️ Ephemeral Agent Pods<br/>(Maven / Skopeo / Cosign)"]
+        ArgoCD["🐙 ArgoCD 3.5 Controller<br/>(ApplicationSet / Prometheus)"]
+        
+        Jenkins -->|OTLP Traces & Metrics| Collector
+        Agents -->|Span Context (TRACEPARENT)| Collector
+        ArgoCD -->|Sync & Health Metrics| Prom
+    end
 
-    Jenkins -->|W3C Trace Spans| OTel
-    Agents -->|Span Context| OTel
-    Jenkins -->|JVM & Queue Metrics| Prom
-    Argo -->|Sync & Health Metrics| Prom
-    OTel -->|Trace Spans| Grafana
-    Prom -->|Scrape Metrics| Grafana
+    subgraph Layer2["2. Observability & Telemetry Processing"]
+        direction TB
+        Collector["🔭 OpenTelemetry Collector Contrib<br/>(OTLP gRPC:4317 / HTTP:4318)"]
+        Prom["🔥 Prometheus Server<br/>(Scrape & Metric Storage)"]
+        
+        Collector -->|Metrics Namespace: jenkins_otel| Prom
+    end
+
+    subgraph Layer3["3. Deployed Microservices & Web Apps"]
+        direction TB
+        SpringBoot["☕ Spring Boot 3 Microservice<br/>(Micrometer Tracing + OTLP)"]
+        Angular["🅰️ Angular 18 Single Page App<br/>(@opentelemetry/sdk-trace-web)"]
+        
+        Angular -->|HTTP Call + W3C Trace Header| SpringBoot
+        SpringBoot -->|OTLP Traces & Exemplars| Collector
+        SpringBoot -->|/actuator/prometheus| Prom
+    end
+
+    subgraph Layer4["4. Unified Grafana 11+ Visualization & Correlation"]
+        direction TB
+        Grafana["📊 Grafana Unified Observability<br/>(Dashboards + Trace-to-Log + Exemplars)"]
+        
+        Prom -->|Exemplars & Timeseries| Grafana
+        Collector -->|Correlated Traces| Grafana
+    end
 ```
 
-- **W3C Distributed Tracing**: Every pipeline execution generates a root trace. Stages and steps become child spans.
-- **Metric Correlation**: Prometheus scrapes build duration, queue wait times, and agent scaling metrics.
-- **Grafana Preloaded Dashboards**:
-  - `jenkins-performance-otel.json`: Visualizes stage durations, queue latency, success rates, and ephemeral pod concurrency.
-  - `argocd-gitops-sync.json`: Visualizes application sync phases, cluster health, and drift detection.
+#### The 3 Pillars of Observability with Full Correlation
+
+| Pillar | Platform Telemetry (Jenkins & ArgoCD) | Workload Telemetry (Spring Boot & Angular) | End-to-End Correlation Link |
+| :--- | :--- | :--- | :--- |
+| **Traces (OpenTelemetry)** | Pipeline Root Spans, Stage Spans, Step Spans, Image Push & ArgoCD Sync Spans | Incoming HTTP Controller Spans, Database Queries, Downstream REST calls | **W3C `traceparent` Header**: Extracted in CI $\rightarrow$ passed to GitOps commit $\rightarrow$ queried in live app logs. |
+| **Metrics (Prometheus)** | `jenkins_runs_total`, `jenkins_executor_queue_time_bucket`, `argocd_app_sync_total` | `http_server_requests_seconds_bucket`, `jvm_memory_used_bytes`, `jvm_gc_pause_seconds` | **Prometheus Exemplars**: High latency spikes in Grafana graph link directly to the specific OTel trace ID. |
+| **Logs (Structured)** | Jenkins Controller & Agent console logs formatted with build metadata | Spring Boot Logback JSON logs with `%X{trace_id}` and `%X{span_id}` | **Trace-to-Logs Derived Fields**: 1-click jump from a Grafana trace span to the exact container log lines. |
+
+---
+
+#### 1. W3C Trace Context Propagation (Pipeline $\rightarrow$ GitOps $\rightarrow$ Live App)
+
+The platform maintains unbroken distributed trace continuity using standard **W3C Trace Context (`traceparent`)**:
+
+1. **Pipeline Execution**: The Jenkins OpenTelemetry plugin generates a root `trace_id` (e.g. `4bf92f3577b34da6a3ce929d0e0e4736`).
+2. **Shared Library Step (`otelLogEvent.groovy`)**: Emits span annotations with build number, git commit SHA, and target cluster, exporting `CURRENT_TRACEPARENT` to the agent environment:
+   ```groovy
+   otelLogEvent(
+       name: 'cd.orchestration.initialized',
+       app: params.APP_NAME,
+       imageTag: params.IMAGE_TAG,
+       gitCommit: env.GIT_COMMIT_SHORT,
+       caller: params.TRIGGERED_BY
+   )
+   ```
+3. **Application Runtime Tracing**: Spring Boot 3 uses `micrometer-tracing-bridge-otel` to ingest the trace context from incoming requests and forwards spans to the OpenTelemetry Collector:
+   ```yaml
+   management:
+     tracing:
+       sampling:
+         probability: 1.0
+       propagation:
+         type: W3C
+     otlp:
+       tracing:
+         endpoint: http://otel-collector.observability.svc.cluster.local:4318/v1/traces
+     metrics:
+       distribution:
+         percentiles-histogram:
+           http.server.requests: true
+   ```
+4. **Client-Side SPA Tracing**: Angular Single Page Apps instrumented with `@opentelemetry/sdk-trace-web` attach the `traceparent` HTTP header to all AJAX/Fetch calls, connecting user button clicks in the browser to backend Java transactions.
+
+---
+
+#### 2. Prometheus Exemplars & Traces-to-Logs Correlation in Grafana
+
+Grafana 11+ is pre-configured with **Prometheus Exemplars** enabled in [`helm/observability/grafana-values.yaml`](helm/observability/grafana-values.yaml):
+* When Prometheus collects `http_server_requests_seconds_bucket` latency metrics, Micrometer attaches the active `trace_id` as an exemplar.
+* In Grafana, hovering over a latency spike displays a blue exemplar dot; clicking it opens the exact OpenTelemetry trace span in the side-by-side Trace View.
+
+---
+
+#### 3. Pre-configured Enterprise Grafana Dashboards
+
+The repository ships with **3 production-grade, pre-provisioned Grafana Dashboards**:
+
+| Dashboard UID | Dashboard Name | Scope & Visualized Metrics |
+| :--- | :--- | :--- |
+| **`jenkins-performance-otel`** | **Jenkins Platform & Ephemeral Agent APM** | Stage durations, p95 queue latency, success/failure rate, dynamic Kubernetes agent pod concurrency, OTel trace spans. |
+| **`argocd-gitops-sync`** | **ArgoCD 3.5 Multi-Cluster GitOps Sync** | Application health status (`Healthy`/`Degraded`), sync phases (`Synced`/`OutOfSync`), sync waves progression, drift detection. |
+| **`workload-apm-correlation`** | **Workload APM & CI/CD GitOps Correlation** | Request throughput (req/sec), p50/p90/p95/p99 latency percentiles with OTel Exemplars, HTTP 5xx error budget, JVM heap & GC pause metrics, correlated CI/CD deployment annotations. |
 
 ---
 
@@ -798,7 +889,8 @@ jenkins-git-parameter/
 ├── observability/
 │   └── dashboards/
 │       ├── jenkins-performance-otel.json    # Grafana Dashboard: Pipeline & OTel Spans
-│       └── argocd-gitops-sync.json          # Grafana Dashboard: ArgoCD GitOps Sync & Health
+│       ├── argocd-gitops-sync.json          # Grafana Dashboard: ArgoCD GitOps Sync & Health
+│       └── app-full-stack-correlation.json  # Grafana Dashboard: Workload APM & CI/CD Correlation
 └── scripts/
     ├── ocp-setup-scc.sh                     # Configure OpenShift SCC & RBAC
     ├── setup-argocd-clusters.sh             # Register STAGING and PROD clusters in ArgoCD

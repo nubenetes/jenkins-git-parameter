@@ -12,8 +12,14 @@ datasources:
         url: http://prometheus-server.observability.svc.cluster.local
         access: proxy
         isDefault: true
+        jsonData:
+          exemplarTraceIdDestinations:
+            - name: trace_id
+              datasourceUid: OpenTelemetry-Traces
+              urlDisplayLabel: "View OpenTelemetry Trace (Tempo/Jaeger)"
       - name: OpenTelemetry-Traces
         type: jaeger
+        uid: OpenTelemetry-Traces
         url: http://otel-collector.observability.svc.cluster.local:16686
         access: proxy
 
@@ -36,7 +42,10 @@ dashboards:
       file: dashboards/jenkins-performance-otel.json
     argocd-gitops:
       file: dashboards/argocd-gitops-sync.json
+    workload-correlation:
+      file: dashboards/app-full-stack-correlation.json
 
 serviceAccount:
   create: true
   name: grafana
+

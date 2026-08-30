@@ -13,6 +13,10 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: jhipster-microservice
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8080"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -22,6 +26,17 @@ spec:
         - name: app
           image: image-registry.openshift-image-registry.svc:5000/nubenetes-dev-apps/jhipster-microservice:2.1.0-latest
           imagePullPolicy: IfNotPresent
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "jhipster-microservice"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.observability.svc.cluster.local:4318/v1/traces"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.name=jhipster-microservice,service.namespace=nubenetes,deployment.environment=dev,cluster.name=ocp-dev"
+            - name: CLUSTER_NAME
+              value: "ocp-dev"
+            - name: DEPLOYMENT_ENV
+              value: "dev"
           ports:
             - containerPort: 8080
               name: http
