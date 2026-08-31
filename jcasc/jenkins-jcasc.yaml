@@ -98,7 +98,7 @@ unclassified:
 
 # Seed Job Definition using JCasC Job DSL Integration
 jobs:
-  - script: >
+  - script: |
       job('00-Seed-Job-Platform-Orchestrator') {
         description('Master Seed Job provisioning CI Build Pipelines and CD Release Orchestration Pipelines as Code.')
         keepDependencies(false)
@@ -112,7 +112,7 @@ jobs:
         }
         steps {
           jobDsl {
-            targets('jobdsl/pipelines-ci.groovy\njobdsl/pipelines-cd.groovy')
+            targets('jobdsl/seed-job.groovy\njobdsl/pipelines-ci.groovy\njobdsl/pipelines-cd.groovy')
             removedJobAction('DELETE')
             removedViewAction('DELETE')
             lookupStrategy('JENKINS_ROOT')
