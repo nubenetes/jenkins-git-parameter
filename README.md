@@ -718,6 +718,67 @@ sequenceDiagram
 > Pattern 2 achieves strict 'Build Once, Deploy Anywhere' artifact immutability. Re-deploying or promoting across environments never recompiles application code, eliminating environment-specific build drift.
 
 
+
+##### 3. Automated Downstream Hand-off & Environment Targeting Flow
+
+A foundational capability of Pattern 2 is the **automated downstream linkage** between Pipeline 01 (CI Build) and Pipeline 02 (CD Release Orchestrator). When an engineer or external system launches Pipeline 01, they can choose whether and where the resulting immutable artifact should be deployed:
+
+<details>
+<summary>🔄 <b>Click to expand: Downstream Hand-off & Environment Targeting Flow Diagram</b></summary>
+
+```mermaid
+flowchart LR
+    subgraph CIStage["1. Pipeline 01: CI Build"]
+        direction TB
+        Dev1["👩‍💻 User"] -->|"Selects Branch & Env"| CI["🏗️ 01-CI-Build<br/>• Compiles Artifact<br/>• Signs Image<br/>• Pushes to DEV"]
+        CI -->|"Trigger CD"| Dispatch["⚡ build job:<br/>02-CD-Orchestrator<br/>Passes: IMAGE_TAG"]
+    end
+
+    subgraph CDStage["2. Pipeline 02: CD Orchestrator"]
+        direction TB
+        Dispatch --> CD["🚀 02-CD-Orchestrator<br/>• Resolves vars<br/>• Routes by Env"]
+        
+        CD -->|"env == 'dev'"| DevTarget["☸️ OpenShift DEV<br/>• gitopsCommit(dev)<br/>• argoAppSync(dev)"]
+        CD -->|"env == 'staging'"| StgTarget["☸️ OpenShift STAGING<br/>• skopeoPromote<br/>• argoAppSync(stg)"]
+        CD -->|"env == 'prod'"| PrdTarget["☸️ OpenShift PROD<br/>• Approval Gate<br/>• skopeoPromote<br/>• argoAppSync(prd)"]
+    end
+```
+
+</details>
+
+#### 📋 Downstream Parameter Passing & Execution Logic:
+* **Configured in Job DSL (`jobdsl/pipelines-ci.groovy`)**:
+  * `TRIGGER_CD_RELEASE` (boolean, default: `true`): Automatically dispatches downstream release.
+  * `GLOBAL_VARS_BRANCH` (string, default: `'main'`): Global configuration branch passed to Pipeline 02.
+  * `TARGET_ENVIRONMENT` (choice: `dev`, `staging`, `prod`, `full-promotion-chain`): Initial target environment.
+* **Trigger Stage in Pipeline 01 (`Jenkinsfile.app-java-maven`)**:
+  ```groovy
+  stage('Trigger CD Release Orchestrator') {
+      when { expression { return params.TRIGGER_CD_RELEASE == true } }
+      steps {
+          build job: '02-CD-Release-Orchestrators/multi-cluster-release-orchestrator',
+              parameters: [
+                  string(name: 'GLOBAL_VARS_REVISION', value: params.GLOBAL_VARS_BRANCH ?: 'main'),
+                  string(name: 'APP_NAME', value: env.APP_NAME),
+                  string(name: 'IMAGE_TAG', value: env.CALCULATED_TAG),
+                  string(name: 'TARGET_ENVIRONMENT', value: params.TARGET_ENVIRONMENT ?: 'dev'),
+                  booleanParam(name: 'AUTO_PROMOTE_TO_STAGING', value: true),
+                  booleanParam(name: 'REQUIRE_PROD_APPROVAL', value: true),
+                  string(name: 'TRIGGERED_BY', value: 'CI_PIPELINE'),
+                  string(name: 'CHANGE_REQUEST_ID', value: "CI-AUTO-${BUILD_NUMBER}")
+              ],
+              wait: false
+      }
+  }
+  ```
+* **Environment-Specific Routing in Pipeline 02 (`Jenkinsfile.release-orchestrator`)**:
+  * **Target `dev`**: Updates `dev` overlays and triggers `argoAppSync` on OpenShift DEV.
+  * **Target `staging`**: Promotes container image via Skopeo from DEV to STAGING registry, updates manifests, and synchronizes OpenShift STAGING.
+  * **Target `prod`**: Promotes image to PROD registry, pauses at the interactive `Production Approval Gate` (`input` step), and deploys with ArgoCD sync waves on OpenShift PROD.
+
+> **💡 Architectural Summary & Conclusion**:
+> This automated linkage guarantees 'Build Once, Deploy Anywhere' artifact immutability. Pipeline 02 never recompiles source code—it promotes the exact, cryptographically verified container image digest created by Pipeline 01.
+
 ---
 
 #### When to Use Each Pattern: Environment & Persona Decision Matrix
