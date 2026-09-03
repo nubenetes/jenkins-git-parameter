@@ -4,9 +4,13 @@
 # ==============================================================================
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "======================================================================"
 echo "🧹 DECOMMISSIONING NUBENETES PLATFORM ON OPENSHIFT 4.20+"
 echo "======================================================================"
+
+kubectl delete -f "${SCRIPT_DIR}/argocd-apps/" --ignore-not-found=true || true
 
 if command -v helm &>/dev/null; then
     echo "Uninstalling Helm Releases..."
