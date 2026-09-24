@@ -98,6 +98,7 @@
 - [Decommissioning & Reinstallation](#decommissioning--reinstallation)
   - [Clean Decommission](#clean-decommission)
   - [Full Reinstallation](#full-reinstallation)
+- [Video Walkthroughs & Architecture References (YouTube)](#video-walkthroughs--architecture-references-youtube)
 - [References & Evidence Links](#references--evidence-links)
 
 ---
@@ -1668,6 +1669,36 @@ To perform a complete wipe and redeployment:
 # or
 make reinstall
 ```
+
+---
+
+## Video Walkthroughs & Architecture References (YouTube)
+
+Architectural deep dives, video walkthroughs, and technical shorts for `jenkins-git-parameter` and multi-cluster GitOps promotion are hosted on the **[Nubenetes YouTube Channel (@nubenetes)](https://www.youtube.com/@nubenetes)**.
+
+<details open>
+<summary>📂 <strong>Architecture Video Shorts & Guides</strong></summary>
+
+<br/>
+
+##### How Jenkins Git Parameters Protect Production
+- 🔗 **Link**: [https://www.youtube.com/shorts/0Zd7zNSae48](https://www.youtube.com/shorts/0Zd7zNSae48)
+- 🌐 **Language**: English (Original Audio)
+- ⏱️ **Duration**: 1:13
+- 🏷️ **Domain**: Immutable Container Promotion & Jenkins Parameterization
+- 📝 **Full Description**:
+> 🚀 Why rebuilding code for production risks sneaking in subtle bugs, and how immutable container promotion with Jenkins Git Parameters prevents it.
+>
+> 📌 Key Concepts:
+> • Strict blocking of recompilation during production release runs.
+> • Dynamic scanning of repository tags with the Jenkins Git Parameter plugin.
+> • Promoting pre-validated container images between dev and prod registries via Skopeo.
+> • Bumping GitOps manifests for bit-for-bit parity.
+>
+> 🔗 Architectural Blueprint (This Repository): https://github.com/nubenetes/jenkins-git-parameter
+> 🔗 Next Architectural Stage (Pure GitOps without Jenkins parameter plugins): https://github.com/nubenetes/jenkins-without-git-parameter
+
+</details>
 
 ---
 
