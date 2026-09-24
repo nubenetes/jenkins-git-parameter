@@ -1677,11 +1677,32 @@ make reinstall
 Architectural deep dives, video walkthroughs, and technical shorts for `jenkins-git-parameter` and multi-cluster GitOps promotion are hosted on the **[Nubenetes YouTube Channel (@nubenetes)](https://www.youtube.com/@nubenetes)**.
 
 <details open>
+<summary>📂 <strong>Full-Length Technical Deep Dives & Explanations</strong></summary>
+
+<br/>
+
+##### Jenkins Pure GitOps: Decoupling CI from ArgoCD Multi-Cluster CD
+- 🔗 **Link**: [https://www.youtube.com/watch?v=qntcMvzBx4w](https://www.youtube.com/watch?v=qntcMvzBx4w)
+- 🌐 **Language**: English (Original Audio)
+- ⏱️ **Duration**: 7:52
+- 🏷️ **Domain**: CI/CD Decoupling, SCM Blind Spot & Evolution to Pure GitOps
+- 📝 **Full Description**:
+> 🚀 Architectural breakdown of the SCM pre-execution render paradox when using Jenkins git-parameter plugins across multiple repositories, and how shifting to a pure GitOps model permanently solves it.
+>
+> 📌 Core Discussion Points:
+> • The Pre-Execution Render Paradox: Why UI parameter dropdowns fail before checkout in multi-repo topologies.
+> • Jenkins as a Pure Build Factory: Compiling immutable containers, scanning with Trivy, and cryptographically signing with Cosign (SLSA Level 3).
+> • ArgoCD Multi-Cluster Synchronization: Replacing push deployment scripts with pull-based internal controllers.
+> • Dynamic Tuning without Throttling: Eliminating pod-level CPU limits to prevent Linux CFS bandwidth throttling on multi-threaded runtimes.
+
+</details>
+
+<details open>
 <summary>📂 <strong>Architecture Video Shorts & Guides</strong></summary>
 
 <br/>
 
-##### How Jenkins Git Parameters Protect Production
+##### 1. How Jenkins Git Parameters Protect Production
 - 🔗 **Link**: [https://www.youtube.com/shorts/0Zd7zNSae48](https://www.youtube.com/shorts/0Zd7zNSae48)
 - 🌐 **Language**: English (Original Audio)
 - ⏱️ **Duration**: 1:13
@@ -1697,6 +1718,18 @@ Architectural deep dives, video walkthroughs, and technical shorts for `jenkins-
 >
 > 🔗 Architectural Blueprint (This Repository): https://github.com/nubenetes/jenkins-git-parameter
 > 🔗 Next Architectural Stage (Pure GitOps without Jenkins parameter plugins): https://github.com/nubenetes/jenkins-without-git-parameter
+
+##### 2. The Shift to Pure GitOps Deployments
+- 🔗 **Link**: [https://www.youtube.com/shorts/iKTgIsbQCcQ](https://www.youtube.com/shorts/iKTgIsbQCcQ)
+- ⏱️ **Duration**: 1:23
+- 📝 **Full Description**:
+> 🚀 Why leading platform engineering teams eliminate manual UI deploy buttons, moving from fragile multi-repo parameter dropdowns to webhook-triggered CI and pull-based ArgoCD synchronization.
+
+##### 3. How Pure GitOps Reverses Deployments
+- 🔗 **Link**: [https://www.youtube.com/shorts/0-NIxNk7cuM](https://www.youtube.com/shorts/0-NIxNk7cuM)
+- ⏱️ **Duration**: 1:12
+- 📝 **Full Description**:
+> 🚀 How GitOps completely inverts traditional deployment architecture: replacing fragile external push scripts with an internal ArgoCD controller pulling state from Git without exposing cluster credentials.
 
 </details>
 
